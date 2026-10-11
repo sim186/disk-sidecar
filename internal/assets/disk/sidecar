@@ -1,0 +1,13 @@
+#!/bin/sh
+# Runs the Sidecar program built for this computer:  ./sidecar serve | scan | hash | mcp | ...
+here="$(cd "$(dirname "$0")" && pwd)"
+case "$(uname -s)" in Darwin) os=darwin;; Linux) os=linux;; *) os=unknown;; esac
+case "$(uname -m)" in arm64|aarch64) arch=arm64;; x86_64|amd64) arch=amd64;; *) arch=unknown;; esac
+bin="$here/bin/sidecar-$os-$arch"
+if [ ! -x "$bin" ] && [ -f "$bin" ]; then chmod +x "$bin" 2>/dev/null; fi
+if [ ! -f "$bin" ]; then
+  echo "This disk has no Sidecar program for $os/$arch. Available:"; ls "$here/bin" 2>/dev/null
+  echo "Download the build for this computer from the Disk Sidecar releases and run:  sidecar install <this disk>"
+  printf "Press Enter to close. "; read _; exit 1
+fi
+exec "$bin" "$@"

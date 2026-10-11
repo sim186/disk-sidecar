@@ -6,8 +6,7 @@ index.db*
 log.csv
 _quarantena/
 peers/
-out/
+dist/
 __pycache__/
-*.pyc
 .DS_Store
 ._*

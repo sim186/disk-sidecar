@@ -524,22 +524,34 @@ let stimer;
 $('#q').oninput = () => { clearTimeout(stimer); stimer = setTimeout(runSearch, 250); };
 $('#sscope').onchange = $('#skind').onchange = runSearch;
 const ftsQuery = s => s.split(/\s+/).filter(Boolean).map(t => '"' + t.replace(/"/g, '""') + '"*').join(' ');
-function runSearch() {
+let searchSeq = 0;
+async function runSearch() {
   const term = $('#q').value.trim(), scope = $('#sscope').value, kind = $('#skind').value;
   if (term.length < 2) { $('#sinfo').textContent = 'Scrivi almeno due caratteri.'; $('#results').innerHTML = ''; return; }
+  const seq = ++searchSeq;
   let extra = '', ep = [];
   if (kind !== 'all') { extra += ' AND f.kind = ?'; ep.push(kind); }
   if (state.source !== 'all') { extra += ' AND f.source_id = ?'; ep.push(+state.source); }
   let rows = [];
   if (scope !== 'text') {
     const like = '%' + term.replace(/[\\%_]/g, c => '\\' + c) + '%';
-    rows = rows.concat(q(`SELECT f.id, f.source_id sid, f.path, f.size, f.kind, 'nome' how FROM files f WHERE f.path LIKE ? ESCAPE '\\' ${extra} ORDER BY f.size DESC LIMIT 150`, [like, ...ep]));
+    rows = rows.concat(q(`SELECT f.source_id sid, f.path, f.size, f.kind, 'nome' how FROM files f WHERE f.path LIKE ? ESCAPE '\\' ${extra} ORDER BY f.size DESC LIMIT 150`, [like, ...ep]));
   }
-  if (scope !== 'name' && window.hasText) {
-    try { rows = rows.concat(q(`SELECT f.id, f.source_id sid, f.path, f.size, f.kind, 'contenuto' how FROM file_text t JOIN files f ON f.id = t.rowid WHERE file_text MATCH ? ${extra} LIMIT 150`, [ftsQuery(term), ...ep])); } catch (e) {}
+  let note = '';
+  if (scope !== 'name') {
+    if (window.hasText) {            // an index opened by hand carries its own text
+      try { rows = rows.concat(q(`SELECT f.source_id sid, f.path, f.size, f.kind, 'contenuto' how FROM file_text t JOIN files f ON f.id = t.rowid WHERE file_text MATCH ? ${extra} LIMIT 150`, [ftsQuery(term), ...ep])); } catch (e) {}
+    } else if (actions) {            // the server searches the text of every disk
+      try {
+        const label = state.source === 'all' ? '' : ((sources.find(s => s.id === +state.source) || {}).label || '');
+        const j = await api('api/search?' + new URLSearchParams({ q: term, kind, source: label }));
+        j.rows.forEach(h => { const s = sources.find(x => x.label === h.source); if (s) rows.push({ sid: s.id, path: h.path, size: h.size, kind: h.kind, how: h.how }); });
+      } catch (e) { note = ' La ricerca nel contenuto non è riuscita: ' + e.message; }
+    } else { note = ' Per cercare dentro i file avvia Sidecar con open-sidecar.'; }
   }
-  const seen = new Set(); rows = rows.filter(r => seen.has(r.id) ? false : seen.add(r.id));
-  $('#sinfo').textContent = rows.length ? `${nf.format(rows.length)} risultati${rows.length >= 150 ? ', mostro i primi 150' : ''}.` : 'Nessun risultato.';
+  if (seq !== searchSeq) return;       // a newer search has started
+  const seen = new Set(); rows = rows.filter(r => { const k = r.sid + '|' + r.path; return seen.has(k) ? false : seen.add(k); });
+  $('#sinfo').textContent = (rows.length ? `${nf.format(rows.length)} risultati${rows.length >= 150 ? ', mostro i primi 150' : ''}.` : 'Nessun risultato.') + note;
   const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/&/g, '&amp;'), 'ig');
   const hl = s => esc(s).replace(re, m => `<mark>${m}</mark>`);
   $('#results').innerHTML = rows.length ? '<tr><th>Percorso</th><th>Tipo</th><th class="num">Dimensione</th><th>Trovato in</th><th>Segno</th></tr>' + rows.map(r =>

@@ -4,9 +4,23 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
+## 0.2.0
+
+Rewritten in Go: one program per system, nothing to install first.
+
+- A single executable per system (macOS, Linux, Windows; Intel and ARM) that contains the app, the
+  scanner, the server, the installer and the MCP server. No Python, no dependencies.
+- `sidecar install <disk>` copies the programs for every system it finds onto the disk, so the disk
+  opens on any computer. Updating never touches the index, marks, quarantine or snapshots.
+- Searching inside files is done by the server; the page receives a lean index without the extracted
+  text. With two disks and 257,000 files the page's index went from 1.2 GB (38 s to load) to 100 MB (1.5 s).
+- Text is no longer extracted from build output and dependency folders (`node_modules`, `.git`,
+  `vcpkg_installed`, `build`, ...); only 256 KB per file at most.
+- Same index layout as 0.1.0 (schema 1): indexes made by the Python prototype open unchanged.
+
 ## 0.1.0
 
-First public version.
+Prototype in Python (kept in the git history, tag `v0.1.0`). Same features.
 
 - One sidecar per disk: `<disk>/.sidecar/index.db` describes only that disk. Plugged-in disks
   are found and shown together; snapshots of other computers can be added read-only.

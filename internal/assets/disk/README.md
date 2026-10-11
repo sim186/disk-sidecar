@@ -4,7 +4,8 @@ This folder is the catalog of the disk it sits on. It is created and updated by 
 (https://github.com/sim186/disk-sidecar), version in `VERSION`.
 
 - **Open the catalog:** double click `open-sidecar.command` (Mac) or `open-sidecar.bat` (Windows).
-  Needs Python 3.9 or newer.
+  Nothing else to install. The program for each system is in `bin/`; `sidecar` (or `sidecar.cmd`
+  on Windows) runs the right one: `./sidecar serve | scan | hash | merge | mcp | version`.
 - **index.db** is a SQLite file describing every file on this disk (and only this disk). Anyone
   or any program that can run SQL can read it; open it read-only.
 - Your marks, the quarantine and the history of changes are stored in the same file.
@@ -31,5 +32,5 @@ mtime, kind, top, sha256)` with `path` relative to the disk root and `/` separat
 `scan_log`, `quarantine_moves`, `quarantine_files`. `kind` is one of photo, video, audio,
 document, code, installer, archive, lightroom, other.
 
-For an LLM: `mcp_server.py` exposes this index as MCP tools
-(`claude mcp add disk-sidecar -- python3 /path/to/this/folder/mcp_server.py`).
+For an LLM: `./sidecar mcp` exposes this index as MCP tools
+(`claude mcp add disk-sidecar -- /path/to/this/folder/sidecar mcp`).

@@ -7,10 +7,12 @@ a plain SQLite file, so scripts and LLMs can search it too.
 ![Sidecar showing a disk as a map of folders](docs/screenshot-light.png)
 
 Plug in several disks and Sidecar shows them side by side, compares folders across disks and
-finds the files that exist twice. It works on Mac and Windows, and nothing leaves your machine.
+finds the files that exist twice. It runs on your own computer; nothing is sent anywhere.
 
-- **One catalog per disk.** `<disk>/.sidecar/index.db` describes that disk and only that disk.
-  It travels with the disk and needs nobody else.
+- **One program, nothing to install first.** A single executable per system (macOS, Linux,
+  Windows), with the app inside. No Python, no runtime, no packages.
+- **One catalog per disk.** `<disk>/.sidecar/index.db` describes that disk and only that disk. It
+  travels with the disk, and so do the programs: plug the disk into another computer and open it.
 - **The disk is the truth.** The index is a snapshot. When Sidecar starts it re-checks every
   plugged-in disk and tells you what changed by hand since last time.
 - **Safe clean-up.** Files you mark for deletion are *moved* to a quarantine folder on the same
@@ -21,40 +23,39 @@ finds the files that exist twice. It works on Mac and Windows, and nothing leave
 
 ## Install
 
-You need **Python 3.9 or newer** on every computer where you create or open a catalog. There are
-no other dependencies.
+1. Download the build for your system from the
+   [releases page](https://github.com/sim186/disk-sidecar/releases). To use the same disk on
+   several kinds of computer, download `disk-sidecar-…-all-systems.zip` and unzip it.
+2. Put Sidecar on a disk (this also offers to scan it):
 
-- Mac: `brew install python`, or the installer from [python.org](https://www.python.org/downloads/)
-  (Xcode's command line tools also include a Python 3.9).
-- Windows: [python.org](https://www.python.org/downloads/), tick "Add python.exe to PATH".
+   ```sh
+   ./sidecar-darwin-arm64 install /Volumes/MyDisk        # Mac, Apple silicon
+   ./sidecar-linux-amd64 install /media/me/MyDisk        # Linux
+   sidecar-windows-amd64.exe install E:\                 # Windows
+   ```
 
-Then get Sidecar and install it on a disk:
+   The installer copies every build it finds next to it into `<disk>/.sidecar/bin/`, so the disk
+   opens on every system you downloaded. Run it again later, from a newer download, to update: it
+   leaves your index, marks, quarantine and snapshots alone. `--dry-run` shows what it would do,
+   `--label "Name"` names the disk, `--scan` scans without asking, `--from DIR` adds builds from
+   another folder.
+3. To open the catalog, double click `.sidecar/open-sidecar.command` (Mac and Linux; if macOS blocks
+   it, right click and choose Open) or `.sidecar/open-sidecar.bat` (Windows). Your browser opens a
+   page served from your own computer, `http://127.0.0.1:8765`.
 
-```sh
-git clone https://github.com/sim186/disk-sidecar
-cd disk-sidecar
-python3 install.py /Volumes/MyDisk        # Windows: python install.py E:\
-```
+The builds are not code-signed, so macOS (Gatekeeper) and Windows (SmartScreen) may warn the first
+time. On a Mac, if a downloaded file is refused, run `xattr -d com.apple.quarantine <file>`.
 
-The installer copies the programs into `<disk>/.sidecar/`, offers to scan the disk, and prints
-the file to double click. Run it again later to update: it leaves your index, marks, quarantine
-and snapshots alone. Use `--dry-run` to see what it would do, `--label "Name"` to name the disk,
-`--scan` to scan without asking.
-
-To open the catalog, double click `.sidecar/open-sidecar.command` (Mac; if macOS blocks it, right
-click and choose Open) or `.sidecar/open-sidecar.bat` (Windows). Your browser opens a page served
-from your own computer, `http://127.0.0.1:8765`.
-
-Once installed, the disk is self-contained: you can plug it into any computer that has Python and
-open the catalog there, without this repository.
+**From source** (needs Go, nothing else): `./build.sh` builds every system into `dist/`;
+`./build.sh native` builds only the one you are on.
 
 ## Using it
 
 - **Mappa**: folders as a map sized by space, coloured by file type. Click a folder to open it,
   click a type in the legend to filter. The disks in the left column filter everything.
-- **Cerca**: search names and the contents of text, code and PDF files (PDFs need `pdftotext`
-  from poppler).
-- **Duplicati**: groups of identical files. Run `hash_dups.py` once to turn "probably the same"
+- **Cerca**: names, and the contents of text, code and PDF files (PDFs need `pdftotext` from
+  poppler). Searching inside files needs the server, so open the catalog with `open-sidecar`.
+- **Duplicati**: groups of identical files. Run `sidecar hash` once to turn "probably the same"
   (same name and size) into "identical" (same SHA-256).
 - **Confronta**: pick two folders, even on different disks: what is only in A, only in B, in both,
   and whether one is entirely redundant.
@@ -63,7 +64,10 @@ open the catalog there, without this repository.
   index of the disk the file lives on.
 - **Quarantena**: see below.
 
-The interface is in Italian. The text is inline in `sidecar/catalog.html`.
+The interface is in Italian. The text is inline in `internal/assets/web/catalog.html`.
+
+On the disk, `.sidecar/sidecar` (`sidecar.cmd` on Windows) runs the right build for the computer
+you are on: `./sidecar serve | scan | hash | merge | mcp | version | install`.
 
 ### Freeing space
 
@@ -77,27 +81,27 @@ The interface is in Italian. The text is inline in `sidecar/catalog.html`.
 
 The server refuses, whatever the page asks: paths outside a disk, files or folders that changed
 since the last scan, symlinks, anything on a read-only snapshot, and moving every remaining copy of
-a duplicated file across the plugged-in disks. Every action is appended to `log.csv`.
+a duplicated file across the plugged-in disks. Every action is appended to the disk's `log.csv`.
 
 ### Several disks, and computers you cannot plug in
 
-Start Sidecar from any disk. It looks for `.sidecar/index.db` on every mounted disk (`/Volumes`
-on Mac, drive letters on Windows, `/media`, `/mnt`, `/run/media` on Linux; add more with
-`--mounts DIR`) and shows them together.
+Start Sidecar from any disk, or from anywhere. It looks for `.sidecar/index.db` on every mounted
+disk (`/Volumes` on Mac, drive letters on Windows, `/media`, `/mnt`, `/run/media` on Linux; add more
+with `--mounts DIR`) and shows them together.
 
-To recognise copies across disks, give each disk the hashes of the files whose size also occurs
-on the other (only those files are read):
+To recognise copies across disks, give each disk the hashes of the files whose size also occurs on
+the other (only those files are read):
 
 ```sh
-python3 /Volumes/A/.sidecar/hash_dups.py --db /Volumes/A/.sidecar/index.db --also-match /Volumes/B/.sidecar/index.db
-python3 /Volumes/B/.sidecar/hash_dups.py --db /Volumes/B/.sidecar/index.db --also-match /Volumes/A/.sidecar/index.db
+/Volumes/A/.sidecar/sidecar hash --db /Volumes/A/.sidecar/index.db --also-match /Volumes/B/.sidecar/index.db
+/Volumes/B/.sidecar/sidecar hash --db /Volumes/B/.sidecar/index.db --also-match /Volumes/A/.sidecar/index.db
 ```
 
 A computer you cannot plug in (a laptop at home, say): scan it there into a small file,
 
 ```sh
-python scan.py C:\Users\me --db laptop.db --source "Laptop"
-python hash_dups.py --db laptop.db --also-match <copy of a disk's index.db>
+sidecar scan C:\Users\me --db laptop.db --source "Laptop"
+sidecar hash --db laptop.db --also-match <copy of a disk's index.db>
 ```
 
 and drop `laptop.db` into `<disk>/.sidecar/peers/`. It appears as a read-only snapshot with its
@@ -106,22 +110,23 @@ date. Its copies do not count as safe copies when Sidecar protects the last copy
 ## For LLMs and scripts
 
 ```sh
-claude mcp add disk-sidecar -- python3 /Volumes/MyDisk/.sidecar/mcp_server.py
+claude mcp add disk-sidecar -- /Volumes/MyDisk/.sidecar/sidecar mcp
 ```
 
 Tools: `disk_summary`, `search_files`, `search_content`, `get_file_info`, `list_folder`,
 `find_duplicates`. Or open `index.db` read-only with any SQLite client; the schema and example
-queries are in `sidecar/README.md`, which the installer puts next to the index.
+queries are in `internal/assets/disk/README.md`, which the installer puts next to the index.
 
 ## Versions and updates
 
-Sidecar follows [semantic versioning](https://semver.org/). The version is in `sidecar/VERSION`,
-the history in [CHANGELOG.md](CHANGELOG.md), and each release is a git tag (`v0.1.0`).
+Sidecar follows [semantic versioning](https://semver.org/). The version is in
+`internal/assets/VERSION`, the history in [CHANGELOG.md](CHANGELOG.md), and each release is a git
+tag (`v0.2.0`) that the release workflow turns into downloadable builds.
 
-- Update: `git pull`, then `python3 install.py /Volumes/MyDisk` for each disk.
+- Update: install again from a newer download (`sidecar install /Volumes/MyDisk`).
 - The index has its own `schema_version`. A newer Sidecar opens older indexes; an older Sidecar
   refuses to touch an index written by a newer one, and tells you to update.
-- To release: change `sidecar/VERSION`, add an entry to the changelog, tag and push.
+- To release: change `internal/assets/VERSION`, add an entry to the changelog, tag `vX.Y.Z` and push.
 
 ## Good to know
 
@@ -131,27 +136,34 @@ the history in [CHANGELOG.md](CHANGELOG.md), and each release is a git tag (`v0.
 - NTFS disks are read-only on a Mac without a third-party driver.
 - Copying with Finder or `cp` onto exFAT/NTFS creates `._name` files; Sidecar ignores them.
 - The index holds file names and extracted text. Treat it like the data it describes.
+- Text is extracted from text files, code and PDFs, at most 256 KB per file, and not from build
+  and dependency folders (`node_modules`, `.git`, `build`, `vcpkg_installed`, …): those are still
+  found by name.
 - Skipped on purpose: `$RECYCLE.BIN`, `System Volume Information`, `.Spotlight-V100`, `.Trashes`,
   `.fseventsd`, `.TemporaryItems`, `.sidecar`, `.DS_Store`, `Thumbs.db`, `desktop.ini`.
 
 ## Development
 
 ```sh
-python3 -m unittest discover -s tests -v
+go vet ./... && go test ./...
 ```
 
-The tests build fake disks in a temporary folder: scanning and incremental updates, duplicates
-across disks, merging, installing and updating, and the server (disks found together, changes made
-by hand, marks routed to the right disk, the quarantine and all the rules that protect your files).
-Dependencies of the page are vendored in `sidecar/vendor` (sql.js, MIT; Atkinson Hyperlegible, SIL
-OFL), so it works offline.
+The tests build the program and run it against fake disks: scanning and incremental updates,
+duplicates across disks, merging, installing and updating, and the server (disks found together,
+changes made by hand, marks routed to the right disk, search inside files, the quarantine and every
+rule that protects your files). The page's dependencies (sql.js, MIT; Atkinson Hyperlegible, SIL
+OFL) are vendored in `internal/assets/web/vendor`, so it works offline. SQLite is
+[modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite), pure Go, which is why no C compiler is
+needed and every system builds from a single machine.
 
 What has and has not been checked:
 
-- The test suite passes on macOS with Python 3.9, 3.13 and 3.14. The workflow in
-  `.github/workflows` runs it on Linux, macOS and Windows, but had not run when this was written.
-- Nothing has been run on Windows or Linux by the author: drive letter discovery,
-  `open-sidecar.bat` and the Windows paths are untested.
+- The tests pass on macOS (Apple silicon), also with the race detector. The programs for Windows,
+  Linux and Intel Mac compile, and the Intel Mac one starts under Rosetta, but none of them has
+  been run through the tests on its own system. The workflows in `.github/workflows` do that on
+  GitHub; they had not run when this was written.
+- Nothing has been run on Windows or Linux by the author: drive-letter discovery,
+  `open-sidecar.bat` and Windows paths are untested.
 - The page was checked with a headless browser, not by a person clicking through every dialog.
 
 ## Licence
