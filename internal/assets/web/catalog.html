@@ -303,8 +303,10 @@ function markOf(sid, p) { // a mark on a folder covers everything inside it
   return '';
 }
 const MK = { keep: 'keep', delete: 'delete', review: 'review' };
+const FM = /Mac/i.test(navigator.platform) ? 'Finder' : /Win/i.test(navigator.platform) ? 'Explorer' : 'file manager';
 const mkButtons = (sid, p) => '<span class="mk">' + Object.keys(MK).map(m =>
-  `<button data-m="${m}" data-sid="${sid}" data-p="${esc(p)}" class="${marks[mkey(sid, p)] === m ? 'on' : ''}">${MK[m]}</button>`).join('') + '</span>';
+  `<button data-m="${m}" data-sid="${sid}" data-p="${esc(p)}" class="${marks[mkey(sid, p)] === m ? 'on' : ''}">${MK[m]}</button>`).join('') +
+  (actions ? `<button class="rv" data-sid="${sid}" data-p="${esc(p)}" title="Show in ${FM}">show</button>` : '') + '</span>';
 
 /* ---------- db helpers ---------- */
 function q(sql, params = []) {
@@ -708,6 +710,11 @@ $('#q-empty').onclick = async () => {
 /* mark buttons, everywhere */
 document.addEventListener('click', e => {
   const b = e.target.closest('.mk button'); if (!b) return;
+  if (b.classList.contains('rv')) {
+    const s = sources.find(x => x.id === +b.dataset.sid);
+    api('api/reveal', { source: s ? s.label : '', path: b.dataset.p }).catch(err => toast(err.message));
+    return;
+  }
   setMark(+b.dataset.sid, b.dataset.p, b.dataset.m);
   rerenderCurrent(); renderRail();
 });

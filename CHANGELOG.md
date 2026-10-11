@@ -4,6 +4,14 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
+## 0.4.0
+
+- Every file and folder has a "show" button that reveals it in Finder, Explorer or the file manager.
+  It only works when the disk is plugged in and the page is served by the app (not in a standalone copy).
+- `sidecar install` puts `Open Sidecar.command` (Mac, Linux) and `Open Sidecar.bat` (Windows) in the visible
+  root of the disk, so nobody has to open the hidden `.sidecar` folder. Run the installer again on an
+  existing disk to get them.
+
 ## 0.3.0
 
 - New disks are noticed while the app runs: when a disk without a sidecar is plugged in, the page offers

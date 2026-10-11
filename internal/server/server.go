@@ -299,6 +299,17 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 		startJob(func(j *Job) (any, error) { return s.doEmpty(d.Confirm, j) })
 	case "/api/verify":
 		startJob(s.doVerify)
+	case "/api/reveal":
+		var d struct{ Source, Path string }
+		if err := json.Unmarshal(body, &d); err != nil {
+			bad(err)
+			return
+		}
+		if err := s.doReveal(d.Source, d.Path); err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"ok": true})
 	case "/api/disk/setup", "/api/disk/ignore":
 		var d struct {
 			Path    string `json:"path"`

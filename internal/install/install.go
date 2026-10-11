@@ -278,6 +278,7 @@ func Run(o Options) error {
 		exec.Command("attrib", "+h", target).Run()
 	}
 	tidy(target)
+	launcher := writeLaunchers(disk, o.Out)
 
 	label := o.Label
 	if label == "" {
@@ -302,15 +303,42 @@ func Run(o Options) error {
 		fmt.Fprintf(o.Out, "No index yet. Create it with:\n  \"%s\" scan \"%s\" --db \"%s\" --source \"%s\"\n", filepath.Join(target, "sidecar"), disk, index, label)
 	}
 	tidy(target)
-	launcher := "open-sidecar.command"
-	if runtime.GOOS == "windows" {
-		launcher = "open-sidecar.bat"
-	}
-	fmt.Fprintf(o.Out, "\nDone. To open the catalog, double click:\n  %s\n", filepath.Join(target, launcher))
+	fmt.Fprintf(o.Out, "\nDone. To open the catalog, double click:\n  %s\n", launcher)
 	if len(missingPlatforms(items)) > 0 {
 		fmt.Fprintf(o.Out, "\nThis disk will only open on %s/%s for now. To use it on other systems, run the installer again from a\ndownload of those builds, or point --from at a folder that contains them (sidecar-<os>-<arch>).\n", runtime.GOOS, runtime.GOARCH)
 	}
 	return nil
+}
+
+// Launchers in the visible root of the disk, so nobody has to open the hidden .sidecar folder.
+const (
+	rootCommand = "#!/bin/sh\n# Mac and Linux: double click to open Disk Sidecar.\nexec \"$(dirname \"$0\")/.sidecar/open-sidecar.command\"\n"
+	rootBat     = "@echo off\r\nrem Windows: double click to open Disk Sidecar.\r\ncall \"%~dp0.sidecar\\open-sidecar.bat\"\r\n"
+)
+
+// writeLaunchers puts "Open Sidecar" next to the user's files, for every system, and returns the
+// one to use on this system.
+func writeLaunchers(disk string, out io.Writer) string {
+	files := []struct {
+		name, body string
+		mode       os.FileMode
+	}{{"Open Sidecar.command", rootCommand, 0o755}, {"Open Sidecar.bat", rootBat, 0o644}}
+	for _, f := range files {
+		dst := filepath.Join(disk, f.name)
+		if read(dst) == strings.TrimSpace(f.body) {
+			continue
+		}
+		if err := os.WriteFile(dst, []byte(f.body), f.mode); err != nil {
+			fmt.Fprintf(out, "Could not write %s: %v\n", f.name, err)
+			continue
+		}
+		os.Chmod(dst, f.mode)
+		fmt.Fprintf(out, "copy  %s\n", f.name)
+	}
+	if runtime.GOOS == "windows" {
+		return filepath.Join(disk, files[1].name)
+	}
+	return filepath.Join(disk, files[0].name)
 }
 
 func missingPlatforms(items []item) []string {
