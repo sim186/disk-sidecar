@@ -564,7 +564,7 @@ func TestServerMarksFollowTheDiskThatOwnsTheFile(t *testing.T) {
 		t.Fatalf("A marks: %v", r)
 	}
 	c, e := s.call("/api/marks", map[string]any{"items": []any{map[string]string{"source": "Laptop", "path": "Foto/shared.bin", "mark": "delete"}}})
-	if c != 409 || !strings.Contains(fmt.Sprint(e["error"]), "sola lettura") {
+	if c != 409 || !strings.Contains(fmt.Sprint(e["error"]), "read-only") {
 		t.Fatalf("snapshot: %d %v", c, e)
 	}
 }
@@ -575,7 +575,7 @@ func TestServerQuarantineRestoreEmpty(t *testing.T) {
 	item := func(src, p string) map[string]string { return map[string]string{"source": src, "path": p} }
 	// refuses to take every copy of a duplicated file, across two disks
 	st, _, msg := s.job("/api/quarantine", map[string]any{"items": []any{item("Disk A", "foto/shared.bin"), item("Disk B", "backup/shared.bin")}})
-	if st != "error" || !strings.Contains(msg, "TUTTE le copie") {
+	if st != "error" || !strings.Contains(msg, "ALL copies") {
 		t.Fatalf("last copy: %s %s", st, msg)
 	}
 	if !exists(s.A+"/foto/shared.bin") || !exists(s.B+"/backup/shared.bin") {
@@ -612,10 +612,10 @@ func TestServerQuarantineRestoreEmpty(t *testing.T) {
 	if !exists(s.B+"/backup/onlyB.bin") || count(t, ib, "select count(*) from files") != 1 {
 		t.Fatal("restore incomplete")
 	}
-	if st, _, msg := s.job("/api/empty", map[string]any{"confirm": "ELIMINA"}); st != "done" {
+	if st, _, msg := s.job("/api/empty", map[string]any{"confirm": "DELETE"}); st != "done" {
 		t.Fatalf("empty: %s %s", st, msg)
 	}
-	if exists(s.B+"/.sidecar/_quarantena") || !exists(s.A+"/foto/shared.bin") {
+	if exists(s.B+"/.sidecar/_quarantine") || !exists(s.A+"/foto/shared.bin") {
 		t.Fatal("empty touched the wrong things")
 	}
 }
@@ -626,7 +626,7 @@ func TestServerRefusesChangedFiles(t *testing.T) {
 	time.Sleep(1100 * time.Millisecond)
 	write(t, s.A+"/foto/onlyA.bin", blob(1_250_000, 4)) // changed after the scan
 	st, _, msg := s.job("/api/quarantine", map[string]any{"items": []any{map[string]string{"source": "Disk A", "path": "foto/onlyA.bin"}}})
-	if st != "error" || !strings.Contains(msg, "modificato") {
+	if st != "error" || !strings.Contains(msg, "modified") {
 		t.Fatalf("changed file: %s %s", st, msg)
 	}
 	write(t, s.A+"/doc/extra.txt", "x") // a folder that gained a file

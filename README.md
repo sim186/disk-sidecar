@@ -51,32 +51,29 @@ time. On a Mac, if a downloaded file is refused, run `xattr -d com.apple.quarant
 
 ## Using it
 
-- **Mappa**: folders as a map sized by space, coloured by file type. Click a folder to open it,
+- **Map**: folders as a map sized by space, coloured by file type. Click a folder to open it,
   click a type in the legend to filter. The disks in the left column filter everything.
-- **Cerca**: names, and the contents of text, code and PDF files (PDFs need `pdftotext` from
+- **Search**: names, and the contents of text, code and PDF files (PDFs need `pdftotext` from
   poppler). Searching inside files needs the server, so open the catalog with `open-sidecar`.
-- **Duplicati**: groups of identical files. Run `sidecar hash` once to turn "probably the same"
+- **Duplicates**: groups of identical files. Run `sidecar hash` once to turn "probably the same"
   (same name and size) into "identical" (same SHA-256).
-- **Confronta**: pick two folders, even on different disks: what is only in A, only in B, in both,
+- **Compare**: pick two folders, even on different disks: what is only in A, only in B, in both,
   and whether one is entirely redundant.
-- **Segnati**: next to every file and folder, *tieni* (keep), *elimina* (delete), *vedi* (look
-  later) are notes to yourself. A mark on a folder covers what is inside. Marks are saved in the
+- **Marked**: next to every file and folder, *keep*, *delete* and *review* are notes to yourself. A mark on a folder covers what is inside. Marks are saved in the
   index of the disk the file lives on.
-- **Quarantena**: see below.
-
-The interface is in Italian. The text is inline in `internal/assets/web/catalog.html`.
+- **Quarantine**: see below.
 
 On the disk, `.sidecar/sidecar` (`sidecar.cmd` on Windows) runs the right build for the computer
 you are on: `./sidecar serve | scan | hash | merge | mcp | version | install`.
 
 ### Freeing space
 
-1. Mark files or folders *elimina*.
-2. In **Segnati**, choose "Sposta in quarantena". A progress bar shows the move. The files go to
-   `<disk>/.sidecar/_quarantena/<date>/…` (a rename on the same disk, so it is instant) and leave
+1. Mark files or folders *delete*.
+2. In **Marked**, choose "Move files marked delete to quarantine". A progress bar shows the move. The files go to
+   `<disk>/.sidecar/_quarantine/<date>/…` (a rename on the same disk, so it is instant) and leave
    the index. Nothing is deleted yet.
-3. In **Quarantena** you can restore any item. When you are sure, "Elimina definitivamente…"
-   deletes everything in quarantine after you type `ELIMINA`. This is the only step that cannot be
+3. In **Quarantine** you can restore any item. When you are sure, "Delete permanently…"
+   deletes everything in quarantine after you type `DELETE`. This is the only step that cannot be
    undone, and the only one that frees space.
 
 The server refuses, whatever the page asks: paths outside a disk, files or folders that changed
@@ -158,12 +155,12 @@ needed and every system builds from a single machine.
 
 What has and has not been checked:
 
-- The tests pass on macOS (Apple silicon), also with the race detector. The programs for Windows,
-  Linux and Intel Mac compile, and the Intel Mac one starts under Rosetta, but none of them has
-  been run through the tests on its own system. The workflows in `.github/workflows` do that on
-  GitHub; they had not run when this was written.
-- Nothing has been run on Windows or Linux by the author: drive-letter discovery,
-  `open-sidecar.bat` and Windows paths are untested.
+- The tests pass on macOS (Apple silicon), also with the race detector, and the workflow in
+  `.github/workflows` has run them on GitHub: they pass on macOS and Linux. The first run on Windows
+  failed on a real bug (`--mounts` was ignored there), fixed in 0.2.1; that fix has not been through
+  GitHub yet. The Intel Mac build starts under Rosetta but has not run the tests.
+- Nobody has opened the catalog on Windows or Linux by hand: `open-sidecar.bat`, drive-letter
+  discovery and Windows paths have only the automated tests behind them.
 - The page was checked with a headless browser, not by a person clicking through every dialog.
 
 ## Licence

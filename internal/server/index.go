@@ -29,7 +29,7 @@ func (s *Server) indexFile() (string, error) {
 	}
 	sort.Strings(dbs)
 	if len(dbs) == 0 {
-		return "", fmt.Errorf("nessun indice trovato")
+		return "", fmt.Errorf("no index found")
 	}
 	var sig strings.Builder
 	fmt.Fprintf(&sig, "%d", s.gen.Load())

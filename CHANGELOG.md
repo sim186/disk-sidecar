@@ -4,6 +4,12 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
+## 0.2.1
+
+- The interface and every message are in English. The quarantine folder is `_quarantine` and the word
+  that confirms permanent deletion is `DELETE`. Numbers and dates follow the browser's language.
+- Fix: on Windows, `--mounts` was ignored, so disks mounted outside a drive letter were not found.
+
 ## 0.2.0
 
 Rewritten in Go: one program per system, nothing to install first.

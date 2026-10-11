@@ -30,7 +30,7 @@ type Options struct {
 }
 
 // What an update never overwrites or removes: the user's data.
-var keep = map[string]bool{"index.db": true, "index.db.bak": true, "log.csv": true, "peers": true, "_quarantena": true, "MANIFEST": true}
+var keep = map[string]bool{"index.db": true, "index.db.bak": true, "log.csv": true, "peers": true, "_quarantena": true, "_quarantine": true, "MANIFEST": true}
 
 var binRe = regexp.MustCompile(`^sidecar-(darwin|linux|windows)-(amd64|arm64)(\.exe)?$`)
 

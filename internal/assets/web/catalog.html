@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -148,8 +148,8 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
 <body>
 <div id="drop">
   <div class="word">sidecar</div>
-  <p id="dropmsg">Carico l'indice…</p>
-  <p class="muted">Se non parte da solo, trascina qui il file <b>index.db</b> oppure sceglilo.</p>
+  <p id="dropmsg">Loading the index…</p>
+  <p class="muted">If it does not start by itself, drop the <b>index.db</b> file here or choose it.</p>
   <input type="file" id="pick" accept=".db,.sqlite">
 </div>
 
@@ -157,20 +157,20 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
   <aside id="rail">
     <div class="brand"><span class="word">sidecar</span><span class="ver" id="ver"></span></div>
     <nav id="nav">
-      <button data-tab="map" class="on">Mappa</button>
-      <button data-tab="search">Cerca</button>
-      <button data-tab="dups">Duplicati</button>
-      <button data-tab="cmp">Confronta</button>
-      <button data-tab="marks">Segnati <span class="n" id="nmarks"></span></button>
-      <button data-tab="quar" id="navquar" class="hide">Quarantena <span class="n" id="nquar"></span></button>
+      <button data-tab="map" class="on">Map</button>
+      <button data-tab="search">Search</button>
+      <button data-tab="dups">Duplicates</button>
+      <button data-tab="cmp">Compare</button>
+      <button data-tab="marks">Marked <span class="n" id="nmarks"></span></button>
+      <button data-tab="quar" id="navquar" class="hide">Quarantine <span class="n" id="nquar"></span></button>
     </nav>
     <div>
-      <h2>Dischi</h2>
+      <h2>Disks</h2>
       <ul id="disks"></ul>
     </div>
     <div class="foot">
       <div id="vstatus"></div>
-      <button class="btn hide" id="verify-now">Verifica ora</button>
+      <button class="btn hide" id="verify-now">Check now</button>
     </div>
   </aside>
 
@@ -184,55 +184,55 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
     </section>
 
     <section id="tab-search" class="hide">
-      <h1>Cerca</h1>
+      <h1>Search</h1>
       <div class="row">
-        <input type="search" id="q" placeholder="Nome o parole dentro i file" autocomplete="off">
-        <select id="sscope" aria-label="Dove cercare"><option value="both">Nomi e contenuto</option><option value="name">Solo nomi</option><option value="text">Solo contenuto</option></select>
-        <select id="skind" aria-label="Tipo di file"></select>
+        <input type="search" id="q" placeholder="Name, or words inside files" autocomplete="off">
+        <select id="sscope" aria-label="Where to search"><option value="both">Names and contents</option><option value="name">Names only</option><option value="text">Contents only</option></select>
+        <select id="skind" aria-label="File type"></select>
       </div>
       <p class="lede" id="sinfo"></p>
       <table id="results"></table>
     </section>
 
     <section id="tab-dups" class="hide">
-      <h1>Duplicati</h1>
+      <h1>Duplicates</h1>
       <p class="lede" id="dinfo"></p>
       <div id="dgroups"></div>
     </section>
 
     <section id="tab-cmp" class="hide">
-      <h1>Confronta</h1>
-      <p class="lede">Scegli due cartelle, anche su dischi diversi. Due file sono uguali se hanno lo stesso SHA-256; se un file non ha l'hash, contano nome e dimensione uguali.</p>
+      <h1>Compare</h1>
+      <p class="lede">Pick two folders, even on different disks. Two files are the same if they have the same SHA-256; a file without a hash counts as the same if its name and size match.</p>
       <div class="row">
-        <span>A</span><select id="cmp-sa" aria-label="Disco di A"></select>
-        <input type="text" id="cmp-a" list="folders" size="34" placeholder="cartella (vuoto: tutto il disco)">
+        <span>A</span><select id="cmp-sa" aria-label="Disk of A"></select>
+        <input type="text" id="cmp-a" list="folders" size="34" placeholder="folder (empty: the whole disk)">
       </div>
       <div class="row">
-        <span>B</span><select id="cmp-sb" aria-label="Disco di B"></select>
-        <input type="text" id="cmp-b" list="folders" size="34" placeholder="cartella">
-        <button class="btn" id="cmp-go">Confronta</button>
+        <span>B</span><select id="cmp-sb" aria-label="Disk of B"></select>
+        <input type="text" id="cmp-b" list="folders" size="34" placeholder="folder">
+        <button class="btn" id="cmp-go">Compare</button>
         <datalist id="folders"></datalist>
       </div>
       <div id="cmp-out"></div>
     </section>
 
     <section id="tab-marks" class="hide">
-      <h1>Segnati</h1>
+      <h1>Marked</h1>
       <p class="lede" id="minfo"></p>
       <div class="row">
-        <button class="btn danger hide" id="do-quar">Sposta in quarantena i file da eliminare</button>
-        <button class="btn quiet" id="exp-csv">Esporta CSV</button>
-        <button class="btn quiet" id="exp-sh">Esporta elenco da eliminare</button>
-        <button class="btn quiet" id="clear-marks">Azzera segni</button>
+        <button class="btn danger hide" id="do-quar">Move files marked delete to quarantine</button>
+        <button class="btn quiet" id="exp-csv">Export CSV</button>
+        <button class="btn quiet" id="exp-sh">Export delete list</button>
+        <button class="btn quiet" id="clear-marks">Clear marks</button>
       </div>
       <table id="marklist"></table>
     </section>
 
     <section id="tab-quar" class="hide">
-      <h1>Quarantena</h1>
+      <h1>Quarantine</h1>
       <p class="lede" id="qinfo"></p>
-      <div class="row"><button class="btn danger" id="q-empty">Elimina definitivamente…</button></div>
-      <p class="muted" style="max-width:60ch">Qui i file non sono cancellati: stanno nella cartella <b>.sidecar/_quarantena</b> del loro disco. Puoi ripristinarli. Lo spazio si libera solo quando elimini definitivamente.</p>
+      <div class="row"><button class="btn danger" id="q-empty">Delete permanently…</button></div>
+      <p class="muted" style="max-width:60ch">Files here are not deleted: they sit in the <b>.sidecar/_quarantine</b> folder of their disk. You can restore them. Space is freed only when you delete permanently.</p>
       <table id="quarlist"></table>
     </section>
   </main>
@@ -241,7 +241,7 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
     <h3 id="busy-title">…</h3>
     <div class="bar"><i id="busy-bar"></i></div>
     <div class="txt" id="busy-text"></div>
-    <div class="muted" style="margin-top:.5rem;font-size:.85rem">Lascia aperta questa pagina finché non finisce.</div>
+    <div class="muted" style="margin-top:.5rem;font-size:.85rem">Keep this page open until it finishes.</div>
   </div></div>
   <div id="toast" class="hide" role="status"></div>
 </div>
@@ -249,14 +249,14 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
 <script src="vendor/sql-wasm.js"></script>
 <script>
 const KINDS = ['photo', 'video', 'audio', 'document', 'code', 'installer', 'archive', 'lightroom', 'other'];
-const KIND_LABEL = { photo: 'Foto', video: 'Video', audio: 'Audio', document: 'Documenti', code: 'Codice', installer: 'Installer', archive: 'Archivi', lightroom: 'Lightroom', other: 'Altro' };
+const KIND_LABEL = { photo: 'Photos', video: 'Video', audio: 'Audio', document: 'Documents', code: 'Code', installer: 'Installers', archive: 'Archives', lightroom: 'Lightroom', other: 'Other' };
 const kcol = k => `var(--k-${KINDS.includes(k) ? k : 'other'})`;
 const $ = s => document.querySelector(s);
-const nf = new Intl.NumberFormat('it', { useGrouping: 'always' });
+const nf = new Intl.NumberFormat(undefined, { useGrouping: 'always' });
 const fmt = b => { const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (b >= 1024 && i < 4) { b /= 1024; i++; }
-  return (i ? b.toLocaleString('it', { minimumFractionDigits: b < 100 ? 1 : 0, maximumFractionDigits: b < 100 ? 1 : 0 }) : b) + ' ' + u[i]; };
+  return (i ? b.toLocaleString(undefined, { minimumFractionDigits: b < 100 ? 1 : 0, maximumFractionDigits: b < 100 ? 1 : 0 }) : b) + ' ' + u[i]; };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const srcName = s => s.label + (s.kind === 'snapshot' ? ' (istantanea del ' + new Date(s.scanned_at * 1000).toLocaleDateString('it') + ')' : '');
+const srcName = s => s.label + (s.kind === 'snapshot' ? ' (snapshot of ' + new Date(s.scanned_at * 1000).toLocaleDateString() + ')' : '');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const theme = new URLSearchParams(location.search).get('theme');
 if (theme === 'dark' || theme === 'light') document.documentElement.dataset.theme = theme;
@@ -280,7 +280,7 @@ function setMark(sid, p, m) {
     const label = (sources.find(s => s.id === sid) || {}).label;
     api('api/marks', { items: [{ source: label, path: p, mark: next }] }).catch(e => {
       if (prev) marks[k] = prev; else delete marks[k];
-      toast('Segno non salvato: ' + e.message); rerenderCurrent();
+      toast('Mark not saved: ' + e.message); rerenderCurrent();
     });
   } else { try { localStorage.setItem('sidecar-marks', JSON.stringify(marks)); } catch (e) {} }
 }
@@ -291,7 +291,7 @@ function markOf(sid, p) { // a mark on a folder covers everything inside it
   for (let i = parts.length; i > 0; i--) { const m = marks[mkey(sid, parts.slice(0, i).join('/'))]; if (m) return m; }
   return '';
 }
-const MK = { keep: 'tieni', delete: 'elimina', review: 'vedi' };
+const MK = { keep: 'keep', delete: 'delete', review: 'review' };
 const mkButtons = (sid, p) => '<span class="mk">' + Object.keys(MK).map(m =>
   `<button data-m="${m}" data-sid="${sid}" data-p="${esc(p)}" class="${marks[mkey(sid, p)] === m ? 'on' : ''}">${MK[m]}</button>`).join('') + '</span>';
 
@@ -315,12 +315,12 @@ async function api(path, body) {
   const r = await fetch(path, { method: body ? 'POST' : 'GET', cache: 'no-store',
     headers: { 'X-Sidecar-Token': TOKEN, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || ('errore ' + r.status));
+  if (!r.ok) throw new Error(j.error || ('error ' + r.status));
   return j;
 }
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.remove('hide'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('hide'), 7000); }
 async function runJob(path, body, title) {
-  $('#busy-title').textContent = title; $('#busy-bar').style.width = '0%'; $('#busy-text').textContent = 'Avvio…';
+  $('#busy-title').textContent = title; $('#busy-bar').style.width = '0%'; $('#busy-text').textContent = 'Starting…';
   $('#busy').classList.remove('hide');
   const t0 = Date.now();
   try {
@@ -331,8 +331,8 @@ async function runJob(path, body, title) {
       const pct = j.total ? Math.min(100, Math.round(j.done / j.total * 100)) : 0;
       $('#busy-bar').style.width = (j.state === 'done' ? 100 : pct) + '%';
       const secs = (Date.now() - t0) / 1000;
-      const eta = j.total && j.done > 50 && j.state === 'running' ? `, mancano circa ${Math.max(1, Math.round(secs / j.done * (j.total - j.done)))} s` : '';
-      $('#busy-text').textContent = j.phase + (j.total ? ` ${nf.format(Math.min(j.done, j.total))} di ${nf.format(j.total)} file (${pct}%${eta})` : '');
+      const eta = j.total && j.done > 50 && j.state === 'running' ? `, about ${Math.max(1, Math.round(secs / j.done * (j.total - j.done)))} s left` : '';
+      $('#busy-text').textContent = j.phase + (j.total ? ` ${nf.format(Math.min(j.done, j.total))} of ${nf.format(j.total)} files (${pct}%${eta})` : '');
       if (j.state === 'done') return j.result;
       if (j.state === 'error') throw new Error(j.error);
     }
@@ -361,7 +361,7 @@ async function reloadDb(tab) {
 /* ---------- what changed by hand since last time ---------- */
 $('#verify-now').onclick = async () => {
   try { const { job } = await api('api/verify', {}); watchedJob = job; await watchVerify(job); }
-  catch (e) { toast('Verifica non avviata: ' + e.message); }
+  catch (e) { toast('Check not started: ' + e.message); }
 };
 async function watchVerify(jobId) {
   const st = $('#vstatus');
@@ -369,20 +369,20 @@ async function watchVerify(jobId) {
     for (;;) {
       const j = await api('api/job?id=' + jobId);
       if (j.state === 'running') {
-        st.textContent = 'Verifico ' + j.phase.replace(/^Verifico /, '').replace('…', '') + (j.total ? `: ${nf.format(Math.min(j.done, j.total))} di ${nf.format(j.total)}` : '');
+        st.textContent = j.phase.replace('…', '') + (j.total ? `: ${nf.format(Math.min(j.done, j.total))} of ${nf.format(j.total)}` : '');
         await sleep(700); continue;
       }
-      if (j.state === 'error') { st.textContent = 'Verifica non riuscita: ' + j.error; return; }
-      const r = j.result, changed = r.new + r.changed + r.removed, at = new Date(r.at * 1000).toLocaleTimeString('it', { hour: '2-digit', minute: '2-digit' });
-      if (!changed) { st.textContent = `Verificato alle ${at}, nessun cambiamento.`; return; }
+      if (j.state === 'error') { st.textContent = 'Check failed: ' + j.error; return; }
+      const r = j.result, changed = r.new + r.changed + r.removed, at = new Date(r.at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (!changed) { st.textContent = `Checked at ${at}, no changes.`; return; }
       const parts = [];
-      if (r.new) parts.push(`${nf.format(r.new)} nuovi`); if (r.changed) parts.push(`${nf.format(r.changed)} modificati`); if (r.removed) parts.push(`${nf.format(r.removed)} spariti`);
-      st.textContent = `Verificato alle ${at}: ${parts.join(', ')}.`;
-      toast(`Dall'ultima volta sono cambiati a mano: ${parts.join(', ')}. L'indice è aggiornato.`);
+      if (r.new) parts.push(`${nf.format(r.new)} new`); if (r.changed) parts.push(`${nf.format(r.changed)} modified`); if (r.removed) parts.push(`${nf.format(r.removed)} gone`);
+      st.textContent = `Checked at ${at}: ${parts.join(', ')}.`;
+      toast(`Changed by hand since last time: ${parts.join(', ')}. The index is up to date.`);
       await reloadDb(currentTab());
       return;
     }
-  } catch (e) { st.textContent = 'Verifica non riuscita: ' + e.message; }
+  } catch (e) { st.textContent = 'Check failed: ' + e.message; }
 }
 
 /* ---------- load ---------- */
@@ -392,7 +392,7 @@ async function boot() {
     const r = await fetch('index.db'); if (!r.ok) throw 0;
     open(new Uint8Array(await r.arrayBuffer()));
   } catch (e) {
-    $('#dropmsg').textContent = 'Apri il file index.db per cominciare.';
+    $('#dropmsg').textContent = 'Open the index.db file to begin.';
   }
 }
 function open(bytes, fromReload) {
@@ -404,7 +404,7 @@ function open(bytes, fromReload) {
   loadMarks();
   try { db.exec('SELECT 1 FROM file_text LIMIT 1'); window.hasText = true; } catch (e) { window.hasText = false; }
   try { const v = q("SELECT value FROM meta WHERE key='sidecar_version'")[0]; if (v && !$('#ver').textContent) $('#ver').textContent = 'v' + v.value; } catch (e) {}
-  const kopt = '<option value="all">Tutti i tipi</option>' + KINDS.map(k => `<option value="${k}">${KIND_LABEL[k]}</option>`).join('');
+  const kopt = '<option value="all">All types</option>' + KINDS.map(k => `<option value="${k}">${KIND_LABEL[k]}</option>`).join('');
   $('#skind').innerHTML = kopt;
   $('#drop').classList.add('hide'); $('#app').classList.remove('hide');
   renderRail();
@@ -425,10 +425,10 @@ function renderRail() {
   const total = per.reduce((s, r) => s + r.s, 0), n = per.reduce((s, r) => s + r.n, 0);
   const row = (id, name, meta, share) => `<li><button data-src="${id}" class="${String(state.source) === String(id) ? 'on' : ''}">
     <span class="name">${esc(name)}</span><span class="meta">${meta}</span>${sources.length > 1 ? `<span class="meter"><i style="width:${Math.max(2, Math.round(share * 100))}%"></i></span>` : ''}</button></li>`;
-  $('#disks').innerHTML = (sources.length > 1 ? row('all', 'Tutti i dischi', `${fmt(total)}, ${nf.format(n)} file`, 1) : '') +
+  $('#disks').innerHTML = (sources.length > 1 ? row('all', 'All disks', `${fmt(total)}, ${nf.format(n)} files`, 1) : '') +
     sources.map(s => { const r = by[s.id] || { n: 0, s: 0 };
-      const snap = s.kind === 'snapshot' ? `istantanea del ${new Date(s.scanned_at * 1000).toLocaleDateString('it')}, ` : '';
-      return row(s.id, s.label, `${snap}${fmt(r.s)}, ${nf.format(r.n)} file`, total ? r.s / total : 0); }).join('');
+      const snap = s.kind === 'snapshot' ? `snapshot of ${new Date(s.scanned_at * 1000).toLocaleDateString()}, ` : '';
+      return row(s.id, s.label, `${snap}${fmt(r.s)}, ${nf.format(r.n)} files`, total ? r.s / total : 0); }).join('');
   $('#disks').querySelectorAll('[data-src]').forEach(b => b.onclick = () => {
     state.source = b.dataset.src; state.prefix = ''; renderRail(); rerenderCurrent();
   });
@@ -486,14 +486,14 @@ function renderMap() {
   const bySource = state.source === 'all' && !state.prefix && sources.length > 1;
   const kids = bySource ? sourceRows() : children();
   const parts = state.prefix ? state.prefix.split('/') : [];
-  const rootName = state.source === 'all' ? 'Tutti i dischi' : ((sources.find(s => s.id === +state.source) || {}).label || 'Disco');
+  const rootName = state.source === 'all' ? 'All disks' : ((sources.find(s => s.id === +state.source) || {}).label || 'Disk');
   const crumbs = [`<a data-p="">${esc(rootName)}</a>`].concat(parts.map((p, i) => i === parts.length - 1 ? esc(p) : `<a data-p="${esc(parts.slice(0, i + 1).join('/'))}">${esc(p)}</a>`));
   $('#crumbs').innerHTML = parts.length ? crumbs.join('<span class="sep">/</span>') : esc(rootName);
   $('#crumbs').querySelectorAll('a').forEach(a => a.onclick = () => { state.prefix = a.dataset.p; renderMap(); });
   const total = kids.reduce((s, k) => s + k.size, 0), files = kids.reduce((s, k) => s + k.n, 0);
-  $('#mapinfo').textContent = `${fmt(total)} in ${nf.format(files)} file` + (state.kind !== 'all' ? `, solo ${KIND_LABEL[state.kind].toLowerCase()}` : '') + (bySource ? '. Un clic su un disco lo apre.' : '. Un clic su una cartella la apre.');
+  $('#mapinfo').textContent = `${fmt(total)} in ${nf.format(files)} files` + (state.kind !== 'all' ? `, only ${KIND_LABEL[state.kind].toLowerCase()}` : '') + (bySource ? '. Click a disk to open it.' : '. Click a folder to open it.');
   const kt = kindTotals();
-  $('#legend').innerHTML = `<button data-k="all" class="${state.kind === 'all' ? 'on' : ''}"><span class="t">Tutto</span></button>` +
+  $('#legend').innerHTML = `<button data-k="all" class="${state.kind === 'all' ? 'on' : ''}"><span class="t">All</span></button>` +
     KINDS.filter(k => kt[k]).map(k => `<button data-k="${k}" class="${state.kind === k ? 'on' : ''}"><i style="background:${kcol(k)}"></i><span class="t">${KIND_LABEL[k]}</span><span class="sz">${fmt(kt[k])}</span></button>`).join('');
   $('#legend').querySelectorAll('[data-k]').forEach(b => b.onclick = () => { state.kind = b.dataset.k; renderMap(); });
   const tm = $('#treemap'); const W = tm.clientWidth, H = tm.clientHeight;
@@ -501,7 +501,7 @@ function renderMap() {
   tm.innerHTML = kids.length ? tiles.map(t => {
     const kind = bySource ? t.kind : t.isdir ? dominantKind(t.name) : t.kind;
     const m = bySource ? '' : markOf(t.sid, prefixOf() + t.name);
-    return `<div class="tile ${t.isdir ? 'dir' : ''} ${m ? 'm-' + m : ''}" data-name="${esc(t.name)}" data-dir="${t.isdir}" title="${esc(t.name)}: ${fmt(t.size)}, ${nf.format(t.n)} file"
+    return `<div class="tile ${t.isdir ? 'dir' : ''} ${m ? 'm-' + m : ''}" data-name="${esc(t.name)}" data-dir="${t.isdir}" title="${esc(t.name)}: ${fmt(t.size)}, ${nf.format(t.n)} files"
       style="left:${t.x}px;top:${t.y}px;width:${t.w}px;height:${t.h}px;background:${kcol(kind)}">${t.w > 70 && t.h > 36 ? `<b>${esc(t.name)}${t.isdir && !bySource ? '/' : ''}</b>${fmt(t.size)}` : ''}</div>`;
   }).join('') : '';
   tm.classList.toggle('hide', !kids.length);
@@ -510,11 +510,11 @@ function renderMap() {
     else state.prefix = prefixOf() + el.dataset.name;
     renderMap();
   });
-  $('#listing').innerHTML = kids.length ? '<tr><th>Nome</th><th class="num">File</th><th class="num">Dimensione</th><th class="num">Quota</th><th>Segno</th></tr>' +
+  $('#listing').innerHTML = kids.length ? '<tr><th>Name</th><th class="num">Files</th><th class="num">Size</th><th class="num">Share</th><th>Mark</th></tr>' +
     kids.slice(0, 200).map(k => {
       const full = prefixOf() + k.name;
-      return `<tr><td>${k.isdir ? `<span class="link" ${bySource ? `data-src-go="${k.sid}"` : `data-go="${esc(full)}"`}>${esc(k.name)}${bySource ? '' : '/'}</span>` : esc(k.name)}</td><td class="num">${nf.format(k.n)}</td><td class="num">${fmt(k.size)}</td><td class="num">${total ? (k.size / total * 100).toLocaleString('it', { maximumFractionDigits: 1 }) : 0}%</td><td>${bySource ? '' : mkButtons(k.sid, full)}</td></tr>`;
-    }).join('') : '<tr><td class="muted">Niente da mostrare con questi filtri.</td></tr>';
+      return `<tr><td>${k.isdir ? `<span class="link" ${bySource ? `data-src-go="${k.sid}"` : `data-go="${esc(full)}"`}>${esc(k.name)}${bySource ? '' : '/'}</span>` : esc(k.name)}</td><td class="num">${nf.format(k.n)}</td><td class="num">${fmt(k.size)}</td><td class="num">${total ? (k.size / total * 100).toLocaleString(undefined, { maximumFractionDigits: 1 }) : 0}%</td><td>${bySource ? '' : mkButtons(k.sid, full)}</td></tr>`;
+    }).join('') : '<tr><td class="muted">Nothing to show with these filters.</td></tr>';
   $('#listing').querySelectorAll('[data-go]').forEach(a => a.onclick = () => { state.prefix = a.dataset.go; renderMap(); });
   $('#listing').querySelectorAll('[data-src-go]').forEach(a => a.onclick = () => { state.source = a.dataset.srcGo; state.prefix = ''; renderRail(); renderMap(); });
 }
@@ -527,7 +527,7 @@ const ftsQuery = s => s.split(/\s+/).filter(Boolean).map(t => '"' + t.replace(/"
 let searchSeq = 0;
 async function runSearch() {
   const term = $('#q').value.trim(), scope = $('#sscope').value, kind = $('#skind').value;
-  if (term.length < 2) { $('#sinfo').textContent = 'Scrivi almeno due caratteri.'; $('#results').innerHTML = ''; return; }
+  if (term.length < 2) { $('#sinfo').textContent = 'Type at least two characters.'; $('#results').innerHTML = ''; return; }
   const seq = ++searchSeq;
   let extra = '', ep = [];
   if (kind !== 'all') { extra += ' AND f.kind = ?'; ep.push(kind); }
@@ -535,27 +535,27 @@ async function runSearch() {
   let rows = [];
   if (scope !== 'text') {
     const like = '%' + term.replace(/[\\%_]/g, c => '\\' + c) + '%';
-    rows = rows.concat(q(`SELECT f.source_id sid, f.path, f.size, f.kind, 'nome' how FROM files f WHERE f.path LIKE ? ESCAPE '\\' ${extra} ORDER BY f.size DESC LIMIT 150`, [like, ...ep]));
+    rows = rows.concat(q(`SELECT f.source_id sid, f.path, f.size, f.kind, 'name' how FROM files f WHERE f.path LIKE ? ESCAPE '\\' ${extra} ORDER BY f.size DESC LIMIT 150`, [like, ...ep]));
   }
   let note = '';
   if (scope !== 'name') {
     if (window.hasText) {            // an index opened by hand carries its own text
-      try { rows = rows.concat(q(`SELECT f.source_id sid, f.path, f.size, f.kind, 'contenuto' how FROM file_text t JOIN files f ON f.id = t.rowid WHERE file_text MATCH ? ${extra} LIMIT 150`, [ftsQuery(term), ...ep])); } catch (e) {}
+      try { rows = rows.concat(q(`SELECT f.source_id sid, f.path, f.size, f.kind, 'content' how FROM file_text t JOIN files f ON f.id = t.rowid WHERE file_text MATCH ? ${extra} LIMIT 150`, [ftsQuery(term), ...ep])); } catch (e) {}
     } else if (actions) {            // the server searches the text of every disk
       try {
         const label = state.source === 'all' ? '' : ((sources.find(s => s.id === +state.source) || {}).label || '');
         const j = await api('api/search?' + new URLSearchParams({ q: term, kind, source: label }));
         j.rows.forEach(h => { const s = sources.find(x => x.label === h.source); if (s) rows.push({ sid: s.id, path: h.path, size: h.size, kind: h.kind, how: h.how }); });
-      } catch (e) { note = ' La ricerca nel contenuto non è riuscita: ' + e.message; }
-    } else { note = ' Per cercare dentro i file avvia Sidecar con open-sidecar.'; }
+      } catch (e) { note = ' Searching inside files failed: ' + e.message; }
+    } else { note = ' To search inside files, start Sidecar with open-sidecar.'; }
   }
   if (seq !== searchSeq) return;       // a newer search has started
   const seen = new Set(); rows = rows.filter(r => { const k = r.sid + '|' + r.path; return seen.has(k) ? false : seen.add(k); });
-  $('#sinfo').textContent = (rows.length ? `${nf.format(rows.length)} risultati${rows.length >= 150 ? ', mostro i primi 150' : ''}.` : 'Nessun risultato.') + note;
+  $('#sinfo').textContent = (rows.length ? `${nf.format(rows.length)} results${rows.length >= 150 ? ', showing the first 150' : ''}.` : 'No results.') + note;
   const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/&/g, '&amp;'), 'ig');
   const hl = s => esc(s).replace(re, m => `<mark>${m}</mark>`);
-  $('#results').innerHTML = rows.length ? '<tr><th>Percorso</th><th>Tipo</th><th class="num">Dimensione</th><th>Trovato in</th><th>Segno</th></tr>' + rows.map(r =>
-    `<tr><td class="path">${hl(r.path)}</td><td><span class="dot" style="background:${kcol(r.kind)}"></span> ${KIND_LABEL[r.kind] || 'Altro'}</td><td class="num">${fmt(r.size)}</td><td>${r.how}</td><td>${mkButtons(r.sid, r.path)}</td></tr>`).join('') : '';
+  $('#results').innerHTML = rows.length ? '<tr><th>Path</th><th>Type</th><th class="num">Size</th><th>Found in</th><th>Mark</th></tr>' + rows.map(r =>
+    `<tr><td class="path">${hl(r.path)}</td><td><span class="dot" style="background:${kcol(r.kind)}"></span> ${KIND_LABEL[r.kind] || 'Other'}</td><td class="num">${fmt(r.size)}</td><td>${r.how}</td><td>${mkButtons(r.sid, r.path)}</td></tr>`).join('') : '';
 }
 
 /* ---------- duplicates ---------- */
@@ -571,13 +571,13 @@ function renderDups() {
   }
   const wasted = groups.reduce((s, g) => s + g.size * (g.n - 1), 0);
   $('#dinfo').textContent = (hasHash
-    ? `File identici (stesso SHA-256): ${nf.format(groups.length)} gruppi. `
-    : `File probabilmente uguali (stesso nome e dimensione, da 1 MB): ${nf.format(groups.length)} gruppi. Per la certezza lancia hash_dups.py. `) +
-    `Eliminando tutte le copie in più si liberano ${fmt(wasted)}.`;
+    ? `Identical files (same SHA-256): ${nf.format(groups.length)} groups. `
+    : `Probably identical files (same name and size, from 1 MB): ${nf.format(groups.length)} groups. For certainty, run "sidecar hash". `) +
+    `Deleting every extra copy frees ${fmt(wasted)}.`;
   $('#dgroups').innerHTML = groups.map(g => {
     const files = hasHash ? q('SELECT source_id sid, path, size FROM files WHERE sha256 = ? ORDER BY path', [g.k])
       : q('SELECT source_id sid, path, size FROM files WHERE name || \'|\' || size = ? ORDER BY path', [g.k]);
-    return `<div class="group"><h4>${g.n} copie da ${fmt(g.size)}, in più ${fmt(g.size * (g.n - 1))}</h4>` +
+    return `<div class="group"><h4>${g.n} copies of ${fmt(g.size)}, ${fmt(g.size * (g.n - 1))} extra</h4>` +
       files.map(f => `<div>${mkButtons(f.sid, f.path)}<span>${esc(f.path)} <span class="muted">${esc((sources.find(s => s.id === f.sid) || {}).label || '')}</span></span></div>`).join('') + '</div>';
   }).join('');
 }
@@ -616,22 +616,22 @@ function runCmp() {
   const pa = side('a', sa, ta), pb = side('b', sb, tb);
   const tot = t => q(`SELECT COUNT(*) n, COALESCE(SUM(size),0) s FROM tmp_${t}`)[0];
   const A = tot('a'), B = tot('b');
-  if (!A.n || !B.n) { $('#cmp-out').innerHTML = `<p class="muted">Una delle due cartelle è vuota o non esiste (A: ${nf.format(A.n)} file, B: ${nf.format(B.n)} file).</p>`; return; }
+  if (!A.n || !B.n) { $('#cmp-out').innerHTML = `<p class="muted">One of the two folders is empty or does not exist (A: ${nf.format(A.n)} files, B: ${nf.format(B.n)} files).</p>`; return; }
   const onlyA = q('SELECT path, size, sid FROM tmp_a WHERE k NOT IN (SELECT k FROM tmp_b)');
   const onlyB = q('SELECT path, size, sid FROM tmp_b WHERE k NOT IN (SELECT k FROM tmp_a)');
   const both = q('SELECT COUNT(*) n, COALESCE(SUM(size),0) s FROM tmp_a WHERE k IN (SELECT k FROM tmp_b)')[0];
   const sumOf = r => r.reduce((s, x) => s + x.size, 0);
-  const fig = (t, n, s) => `<div>${t}<b>${nf.format(n)} file</b>${fmt(s)}</div>`;
+  const fig = (t, n, s) => `<div>${t}<b>${nf.format(n)} files</b>${fmt(s)}</div>`;
   const verdict = (name, only, total, other, sid, text) => only.length ? '' :
-    `<div class="verdict"><b>Tutti i ${nf.format(total.n)} file di ${name} (${fmt(total.s)}) esistono anche in ${other}.</b> ${name} è ridondante: eliminandola si liberano ${fmt(total.s)}. <span class="muted">Se contiene un catalogo Lightroom o simili, controlla prima che non punti a questo percorso.</span>
+    `<div class="verdict"><b>All ${nf.format(total.n)} files in ${name} (${fmt(total.s)}) also exist in ${other}.</b> ${name} is redundant: deleting it frees ${fmt(total.s)}. <span class="muted">If it holds a Lightroom catalog or similar, check first that nothing points to this path.</span>
      ${text ? '<div style="margin-top:.5rem">' + mkButtons(sid, text) + '</div>' : ''}</div>`;
-  const table = (title, only, pre, sid) => `<h3>${title}</h3>` + (only.length ? '<table><tr><th>Cartella o file</th><th class="num">File</th><th class="num">Dimensione</th><th>Segno</th></tr>' +
-    sub(only, pre).slice(0, 60).map(e => `<tr><td>${esc(e.name)}${e.dir ? '/' : ''}</td><td class="num">${nf.format(e.n)}</td><td class="num">${fmt(e.size)}</td><td>${mkButtons(e.sid, pre + e.name)}</td></tr>`).join('') + '</table>' : '<p class="muted">Niente.</p>');
+  const table = (title, only, pre, sid) => `<h3>${title}</h3>` + (only.length ? '<table><tr><th>Folder or file</th><th class="num">Files</th><th class="num">Size</th><th>Mark</th></tr>' +
+    sub(only, pre).slice(0, 60).map(e => `<tr><td>${esc(e.name)}${e.dir ? '/' : ''}</td><td class="num">${nf.format(e.n)}</td><td class="num">${fmt(e.size)}</td><td>${mkButtons(e.sid, pre + e.name)}</td></tr>`).join('') + '</table>' : '<p class="muted">Nothing.</p>');
   $('#cmp-out').innerHTML =
-    `<div class="figures">${fig('Solo in A', onlyA.length, sumOf(onlyA))}${fig('In entrambe', both.n, both.s)}${fig('Solo in B', onlyB.length, sumOf(onlyB))}</div>
-     <p class="muted">A ha ${nf.format(A.n)} file (${fmt(A.s)}), B ne ha ${nf.format(B.n)} (${fmt(B.s)}).</p>` +
+    `<div class="figures">${fig('Only in A', onlyA.length, sumOf(onlyA))}${fig('In both', both.n, both.s)}${fig('Only in B', onlyB.length, sumOf(onlyB))}</div>
+     <p class="muted">A has ${nf.format(A.n)} files (${fmt(A.s)}), B has ${nf.format(B.n)} (${fmt(B.s)}).</p>` +
     verdict('A', onlyA, A, 'B', sa, ta) + verdict('B', onlyB, B, 'A', sb, tb) +
-    table('Solo in A, non esistono in B', onlyA, pa, sa) + table('Solo in B, non esistono in A', onlyB, pb, sb);
+    table('Only in A, missing from B', onlyA, pa, sa) + table('Only in B, missing from A', onlyB, pb, sb);
 }
 
 /* ---------- marks, export ---------- */
@@ -646,17 +646,17 @@ function renderMarks() {
   const rows = markRows(); let del = 0;
   const html = rows.map(r => { const z = sizeOf(r.sid, r.path); if (r.mark === 'delete') del += z.s;
     return `<tr><td>${esc(r.source)}</td><td class="path">${esc(r.path)}</td><td class="num">${nf.format(z.n)}</td><td class="num">${fmt(z.s)}</td><td>${mkButtons(r.sid, r.path)}</td></tr>`; }).join('');
-  $('#marklist').innerHTML = rows.length ? '<tr><th>Disco</th><th>Percorso</th><th class="num">File</th><th class="num">Dimensione</th><th>Segno</th></tr>' + html : '';
-  $('#minfo').textContent = rows.length ? `${nf.format(rows.length)} segni. Da eliminare: ${fmt(del)}.` : 'Nessun segno. Usa "tieni", "elimina" e "vedi" accanto a file e cartelle per prendere appunti; non cambia nulla sul disco.';
+  $('#marklist').innerHTML = rows.length ? '<tr><th>Disk</th><th>Path</th><th class="num">Files</th><th class="num">Size</th><th>Mark</th></tr>' + html : '';
+  $('#minfo').textContent = rows.length ? `${nf.format(rows.length)} marks. To delete: ${fmt(del)}.` : 'No marks yet. Use "keep", "delete" and "review" next to files and folders to take notes; nothing changes on the disk.';
 }
 function download(name, text) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = name; a.click(); }
-$('#exp-csv').onclick = () => download('sidecar-segni.csv', 'disco,percorso,segno\n' + markRows().map(r => [r.source, r.path, r.mark].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n'));
-$('#exp-sh').onclick = () => download('sidecar-da-eliminare.txt', '# Percorsi segnati "elimina", relativi alla radice del disco. Controlla prima di usarli.\n' + markRows().filter(r => r.mark === 'delete').map(r => r.source + '\t' + r.path).join('\n'));
+$('#exp-csv').onclick = () => download('sidecar-marks.csv', 'disk,path,mark\n' + markRows().map(r => [r.source, r.path, r.mark].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n'));
+$('#exp-sh').onclick = () => download('sidecar-delete-list.txt', '# Paths marked "delete", relative to the disk root. Check before using them.\n' + markRows().filter(r => r.mark === 'delete').map(r => r.source + '\t' + r.path).join('\n'));
 $('#clear-marks').onclick = async () => {
-  if (!confirm('Azzerare tutti i segni?')) return;
+  if (!confirm('Clear all marks?')) return;
   if (TOKEN && actions) {
     try { await api('api/marks', { items: markRows().map(r => ({ source: r.source, path: r.path, mark: null })) }); }
-    catch (e) { return alert('Segni non azzerati:\n\n' + e.message); }
+    catch (e) { return alert('Marks not cleared:\n\n' + e.message); }
   }
   marks = {}; try { localStorage.removeItem('sidecar-marks'); } catch (e) {}
   renderMarks(); $('#nmarks').textContent = '';
@@ -665,33 +665,33 @@ $('#clear-marks').onclick = async () => {
 /* ---------- quarantine ---------- */
 $('#do-quar').onclick = async () => {
   const del = markRows().filter(r => r.mark === 'delete');
-  if (!del.length) return toast('Nessun elemento segnato "elimina".');
+  if (!del.length) return toast('Nothing is marked "delete".');
   const size = del.reduce((s, r) => s + sizeOf(r.sid, r.path).s, 0);
-  if (!confirm(`Spostare in quarantena ${del.length} element${del.length === 1 ? 'o' : 'i'} (${fmt(size)})?\n\nNon vengono cancellati: potrai ripristinarli dalla scheda Quarantena.`)) return;
+  if (!confirm(`Move ${del.length} item${del.length === 1 ? '' : 's'} (${fmt(size)}) to quarantine?\n\nNothing is deleted: you can restore them from the Quarantine tab.`)) return;
   try {
-    const res = await runJob('api/quarantine', { items: del.map(r => ({ source: r.source, path: r.path })) }, 'Sposto in quarantena');
-    toast(`Spostati ${nf.format(res.files)} file (${fmt(res.bytes)}) in quarantena.`);
+    const res = await runJob('api/quarantine', { items: del.map(r => ({ source: r.source, path: r.path })) }, 'Moving to quarantine');
+    toast(`Moved ${nf.format(res.files)} files (${fmt(res.bytes)}) to quarantine.`);
     await reloadDb('quar');
-  } catch (e) { alert('Non spostato:\n\n' + e.message); }
+  } catch (e) { alert('Not moved:\n\n' + e.message); }
 };
 function renderQuar() {
-  if (!actions) { $('#qinfo').textContent = 'La quarantena funziona solo se avvii Sidecar con open-sidecar.'; return; }
+  if (!actions) { $('#qinfo').textContent = 'Quarantine only works when Sidecar is started with open-sidecar.'; return; }
   const items = quarState.quarantine, tot = items.reduce((s, m) => s + m.size, 0);
-  $('#qinfo').textContent = items.length ? `${nf.format(items.length)} elementi in attesa, ${fmt(tot)}.` : 'La quarantena è vuota.';
+  $('#qinfo').textContent = items.length ? `${nf.format(items.length)} items waiting, ${fmt(tot)}.` : 'Quarantine is empty.';
   $('#q-empty').classList.toggle('hide', !items.length);
-  $('#quarlist').innerHTML = items.length ? '<tr><th>Spostato</th><th>Disco</th><th>Percorso originale</th><th class="num">File</th><th class="num">Dimensione</th><th></th></tr>' +
-    items.map(m => `<tr><td>${new Date(m.moved_at * 1000).toLocaleString('it', { dateStyle: 'short', timeStyle: 'short' })}</td><td>${esc(m.source)}</td><td class="path">${esc(m.path)}${m.is_dir ? '/' : ''}</td><td class="num">${nf.format(m.files)}</td><td class="num">${fmt(m.size)}</td><td><button class="btn quiet" data-restore="${m.id}">Ripristina</button></td></tr>`).join('') : '';
+  $('#quarlist').innerHTML = items.length ? '<tr><th>Moved</th><th>Disk</th><th>Original path</th><th class="num">Files</th><th class="num">Size</th><th></th></tr>' +
+    items.map(m => `<tr><td>${new Date(m.moved_at * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td><td>${esc(m.source)}</td><td class="path">${esc(m.path)}${m.is_dir ? '/' : ''}</td><td class="num">${nf.format(m.files)}</td><td class="num">${fmt(m.size)}</td><td><button class="btn quiet" data-restore="${m.id}">Restore</button></td></tr>`).join('') : '';
   $('#quarlist').querySelectorAll('[data-restore]').forEach(b => b.onclick = async () => {
-    try { const r = await api('api/restore', { id: b.dataset.restore }); toast('Ripristinato: ' + r.restored + '. ' + r.note); await reloadDb('quar'); }
-    catch (e) { alert('Non ripristinato:\n\n' + e.message); }
+    try { const r = await api('api/restore', { id: b.dataset.restore }); toast('Restored: ' + r.restored + '. ' + r.note); await reloadDb('quar'); }
+    catch (e) { alert('Not restored:\n\n' + e.message); }
   });
 }
 $('#q-empty').onclick = async () => {
   const tot = quarState.quarantine.reduce((s, m) => s + m.size, 0);
-  const t = prompt(`Questo cancella definitivamente ${quarState.quarantine.length} elementi (${fmt(tot)}) e non si può annullare.\n\nScrivi ELIMINA per confermare:`);
-  if (t !== 'ELIMINA') return;
-  try { const r = await runJob('api/empty', { confirm: t }, 'Elimino definitivamente'); toast(`Eliminati definitivamente ${nf.format(r.deleted)} elementi (${fmt(r.bytes)}).`); await reloadDb('quar'); }
-  catch (e) { alert('Non eliminato:\n\n' + e.message); }
+  const t = prompt(`This permanently deletes ${quarState.quarantine.length} items (${fmt(tot)}) and cannot be undone.\n\nType DELETE to confirm:`);
+  if (t !== 'DELETE') return;
+  try { const r = await runJob('api/empty', { confirm: t }, 'Deleting permanently'); toast(`Permanently deleted ${nf.format(r.deleted)} items (${fmt(r.bytes)}).`); await reloadDb('quar'); }
+  catch (e) { alert('Not deleted:\n\n' + e.message); }
 };
 
 /* mark buttons, everywhere */

@@ -18,7 +18,7 @@ import (
 	"github.com/sim186/disk-sidecar/internal/scan"
 )
 
-const qdir = ".sidecar/_quarantena"
+const qdir = ".sidecar/_quarantine"
 
 var safeRe = regexp.MustCompile(`[^\p{L}\p{N}_ .\-]`)
 
@@ -44,7 +44,7 @@ func cleanRel(rel string) (string, error) {
 		bad = true
 	}
 	if bad {
-		return "", refuse("percorso non valido: %q", rel)
+		return "", refuse("invalid path: %q", rel)
 	}
 	return rel, nil
 }
@@ -105,17 +105,17 @@ func (s *Server) doMarks(items []markItem) (any, error) {
 	for _, it := range items {
 		src := by[it.Source]
 		if src == nil {
-			return nil, refuse("sorgente sconosciuta: %s", it.Source)
+			return nil, refuse("unknown source: %s", it.Source)
 		}
 		if src.Kind != "disk" {
-			return nil, refuse("%s è un'istantanea di sola lettura: i segni vanno messi dal suo computer", src.Label)
+			return nil, refuse("%s is a read-only snapshot: marks must be set from its own computer", src.Label)
 		}
 		rel, err := cleanRel(it.Path)
 		if err != nil {
 			return nil, err
 		}
 		if it.Mark != nil && *it.Mark != "keep" && *it.Mark != "delete" && *it.Mark != "review" {
-			return nil, refuse("segno non valido: %q", *it.Mark)
+			return nil, refuse("invalid mark: %q", *it.Mark)
 		}
 		groups[src.DB] = append(groups[src.DB], mk{src.SID, rel, it.Mark, it.Note})
 	}
@@ -196,7 +196,7 @@ func plan(db *sql.DB, items []struct{ Source, Path string }, job *Job, diskRoot 
 	for n, it := range items {
 		if job != nil {
 			parts := strings.Split(it.Path, "/")
-			job.Update(fmt.Sprintf("Verifico %d/%d: %s", n+1, len(items), parts[len(parts)-1]), 0, 0)
+			job.Update(fmt.Sprintf("Checking %d/%d: %s", n+1, len(items), parts[len(parts)-1]), 0, 0)
 		}
 		m, err := planOne(db, srcs[it.Source].sid, srcs[it.Source].root, it.Source, it.Path)
 		if err != nil {
@@ -241,18 +241,18 @@ func asRefused(err error, out **Refused) bool {
 
 func planOne(db *sql.DB, sid int64, root, label, rel string) (*move, error) {
 	if !dirExists(root) {
-		return nil, refuse("%s: il disco non è raggiungibile da questo computer (%s)", label, root)
+		return nil, refuse("%s: the disk is not reachable from this computer (%s)", label, root)
 	}
 	full := filepath.Join(root, filepath.FromSlash(rel))
 	if !inside(root, full) {
-		return nil, refuse("%s: fuori dalla sorgente", rel)
+		return nil, refuse("%s: outside the source", rel)
 	}
 	lst, err := os.Lstat(full)
 	if err != nil {
-		return nil, refuse("%s: non esiste", rel)
+		return nil, refuse("%s: does not exist", rel)
 	}
 	if lst.Mode()&os.ModeSymlink != 0 {
-		return nil, refuse("%s: è un collegamento simbolico", rel)
+		return nil, refuse("%s: is a symbolic link", rel)
 	}
 	m := &move{label: label, root: root, rel: rel, full: full, sid: sid}
 	load := func(q string, args ...any) ([]moveRow, error) {
@@ -276,16 +276,16 @@ func planOne(db *sql.DB, sid int64, root, label, rel string) (*move, error) {
 			return nil, err
 		}
 		if len(rows) == 0 {
-			return nil, refuse("%s: non è nell'indice (rifai la scansione)", rel)
+			return nil, refuse("%s: not in the index (scan again)", rel)
 		}
 		if lst.Size() != rows[0].size || lst.ModTime().Unix() != rows[0].mtime {
-			return nil, refuse("%s: modificato dopo la scansione (rifai la scansione)", rel)
+			return nil, refuse("%s: modified since the last scan (scan again)", rel)
 		}
 		m.rows = rows
 		return m, nil
 	}
 	if !lst.IsDir() {
-		return nil, refuse("%s: non è un file né una cartella", rel)
+		return nil, refuse("%s: is neither a file nor a folder", rel)
 	}
 	pre := rel + "/"
 	rows, err := load(`SELECT id, path, size, mtime, sha256 FROM files WHERE source_id=? AND substr(path,1,?)=?`, sid, len(pre), pre)
@@ -318,7 +318,7 @@ func planOne(db *sql.DB, sid int64, root, label, rel string) (*move, error) {
 		r, _ := filepath.Rel(root, p)
 		r = filepath.ToSlash(r)
 		if k, ok := known[r]; !ok || k.size != info.Size() || k.mtime != info.ModTime().Unix() {
-			bad = refuse("%s: la cartella è cambiata dopo la scansione (%s); rifai la scansione", rel, r)
+			bad = refuse("%s: the folder changed since the last scan (%s); scan again", rel, r)
 		}
 		return nil
 	})
@@ -398,7 +398,7 @@ func checkLastCopy(liveDBs []string, all []*move) error {
 			break
 		}
 	}
-	return refuse("Rifiutato: verrebbero spostate TUTTE le copie di %d file duplicati (es. %s). Tieni almeno una copia per gruppo.", len(last), example)
+	return refuse("Refused: this would move ALL copies of %d duplicated files (e.g. %s). Keep at least one copy of each.", len(last), example)
 }
 
 type qItem struct {
@@ -421,10 +421,10 @@ func (s *Server) doQuarantine(items []qItem, job *Job) (any, error) {
 	for _, it := range items {
 		src := by[it.Source]
 		if src == nil {
-			return nil, refuse("sorgente sconosciuta: %s", it.Source)
+			return nil, refuse("unknown source: %s", it.Source)
 		}
 		if src.Kind != "disk" {
-			return nil, refuse("%s è un'istantanea di sola lettura: non posso spostare i suoi file", src.Label)
+			return nil, refuse("%s is a read-only snapshot: its files cannot be moved", src.Label)
 		}
 		rel, err := cleanRel(it.Path)
 		if err != nil {
@@ -462,7 +462,7 @@ func (s *Server) doQuarantine(items []qItem, job *Job) (any, error) {
 		}
 	}
 	if len(plans) == 0 {
-		return nil, refuse("niente da spostare")
+		return nil, refuse("nothing to move")
 	}
 	var live []string
 	for _, d := range disks {
@@ -476,7 +476,7 @@ func (s *Server) doQuarantine(items []qItem, job *Job) (any, error) {
 		total += int64(len(m.rows))
 	}
 	if job != nil {
-		job.Update("Sposto in quarantena…", 0, total)
+		job.Update("Moving to quarantine…", 0, total)
 	}
 	batch := time.Now().Format("2006-01-02_150405")
 	backed := map[string]bool{}
@@ -498,7 +498,7 @@ func (s *Server) doQuarantine(items []qItem, job *Job) (any, error) {
 			size += r.size
 		}
 		if err := os.Rename(m.full, qfull); err != nil {
-			return nil, refuse("%s: spostamento non riuscito (%v). Spostati finora: %d elementi.", m.rel, err, done)
+			return nil, refuse("%s: move failed (%v). Moved so far: %d items.", m.rel, err, done)
 		}
 		tx, err := m.db.Begin()
 		if err != nil {
@@ -628,7 +628,7 @@ func (s *Server) doRestore(moveID string) (any, error) {
 		}
 	}
 	if disk == nil {
-		return nil, refuse("il disco di questo elemento non è collegato")
+		return nil, refuse("the disk of this item is not plugged in")
 	}
 	db, err := idx.Open(disk.DB)
 	if err != nil {
@@ -639,7 +639,7 @@ func (s *Server) doRestore(moveID string) (any, error) {
 	var rel, qrel string
 	if err := db.QueryRow(`SELECT id, source_id, path, qpath, size FROM quarantine_moves WHERE id=? AND state='moved'`, num).
 		Scan(&id, &sid, &rel, &qrel, &size); err != nil {
-		return nil, refuse("elemento non trovato in quarantena")
+		return nil, refuse("item not found in quarantine")
 	}
 	var src *Src
 	for _, x := range srcs {
@@ -648,17 +648,17 @@ func (s *Server) doRestore(moveID string) (any, error) {
 		}
 	}
 	if src == nil {
-		return nil, refuse("sorgente non trovata")
+		return nil, refuse("source not found")
 	}
 	full, qfull := filepath.Join(src.Root, filepath.FromSlash(rel)), filepath.Join(src.Root, filepath.FromSlash(qrel))
 	if !dirExists(src.Root) {
-		return nil, refuse("il disco non è raggiungibile")
+		return nil, refuse("the disk is not reachable")
 	}
 	if _, err := os.Lstat(full); err == nil {
-		return nil, refuse("%s: esiste già un file o cartella con quel nome; non sovrascrivo", rel)
+		return nil, refuse("%s: a file or folder with that name already exists; not overwriting", rel)
 	}
 	if _, err := os.Lstat(qfull); err != nil {
-		return nil, refuse("%s: non c'è più nella cartella di quarantena", rel)
+		return nil, refuse("%s: no longer in the quarantine folder", rel)
 	}
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		return nil, err
@@ -685,7 +685,7 @@ func (s *Server) doRestore(moveID string) (any, error) {
 	}
 	s.logAction(disk, "restore", src.Label, rel, 0, size)
 	s.gen.Add(1)
-	return map[string]any{"restored": rel, "note": "Usa Verifica ora per ripristinare anche il testo ricercabile."}, nil
+	return map[string]any{"restored": rel, "note": "Use Check now to restore the searchable text too."}, nil
 }
 
 // rmTree deletes a file or folder, counting files for the progress bar.
@@ -722,8 +722,8 @@ func rmTree(path string, job *Job) error {
 }
 
 func (s *Server) doEmpty(confirm string, job *Job) (any, error) {
-	if confirm != "ELIMINA" {
-		return nil, refuse("conferma mancante")
+	if confirm != "DELETE" {
+		return nil, refuse("confirmation missing")
 	}
 	srcs, disks := s.listSources()
 	type dbh struct {
@@ -748,7 +748,7 @@ func (s *Server) doEmpty(confirm string, job *Job) (any, error) {
 		total += n
 	}
 	if job != nil {
-		job.Update("Elimino definitivamente…", 0, total)
+		job.Update("Deleting permanently…", 0, total)
 	}
 	var freed int64
 	count := 0
@@ -826,7 +826,7 @@ func (s *Server) doVerify(job *Job) (any, error) {
 			db.Close()
 		}
 		if job != nil {
-			job.Update("Verifico "+src.Label+"…", 0, hint)
+			job.Update("Checking "+src.Label+"…", 0, hint)
 		}
 		st, err := scan.Run(scan.Options{Root: src.Root, DB: src.DB, Label: src.Raw, Host: host, HashMin: -1, Text: true,
 			Progress: func(n int) {
@@ -861,7 +861,7 @@ func (s *Server) state() map[string]any {
 	for _, d := range disks {
 		id := diskIDOf(d.DB)
 		if prev, ok := ids[id]; ok && id != "" {
-			warnings = append(warnings, fmt.Sprintf("Due dischi hanno lo stesso ID (%s e %s): uno è un clone dell'altro.", prev, d.Root))
+			warnings = append(warnings, fmt.Sprintf("Two disks have the same ID (%s and %s): one is a clone of the other.", prev, d.Root))
 		}
 		ids[id] = d.Root
 	}
@@ -946,7 +946,7 @@ func (s *Server) searchText(q map[string][]string) []hit {
 				continue
 			}
 			for rows.Next() {
-				h := hit{Source: x.Label, How: "contenuto"}
+				h := hit{Source: x.Label, How: "content"}
 				if rows.Scan(&h.Path, &h.Size, &h.Kind) == nil {
 					out = append(out, h)
 				}

@@ -74,10 +74,10 @@ func (s *Server) startJob(fn func(*Job) (any, error)) (*Job, error) {
 		j.mu.Unlock()
 		if running {
 			s.jt.mu.Unlock()
-			return nil, refuse("un'altra operazione è ancora in corso: aspetta che finisca")
+			return nil, refuse("another operation is still running: wait for it to finish")
 		}
 	}
-	job := &Job{id: newToken(8), state: "running", phase: "Preparazione…"}
+	job := &Job{id: newToken(8), state: "running", phase: "Preparing…"}
 	s.jt.jobs[job.id] = job
 	s.jt.order = append(s.jt.order, job.id)
 	for len(s.jt.order) > 8 { // keep the last few; the startup job stays

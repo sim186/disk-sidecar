@@ -66,12 +66,12 @@ func Run(cfg Config, out io.Writer) error {
 				n++
 			}
 		}
-		fmt.Fprintf(out, "  disco: %s  (%d sorgenti)\n", d.Root, n)
+		fmt.Fprintf(out, "  disk: %s  (%d sources)\n", d.Root, n)
 	}
 	if len(disks) == 0 {
-		fmt.Fprintln(out, "  nessun indice trovato: crealo con  sidecar scan <disco> --db <disco>/.sidecar/index.db --source <nome>")
+		fmt.Fprintln(out, "  no index found: create one with  sidecar scan <disk> --db <disk>/.sidecar/index.db --source <name>")
 	}
-	fmt.Fprintln(out, "Ctrl+C per fermare.")
+	fmt.Fprintln(out, "Press Ctrl+C to stop.")
 	if len(disks) > 0 && !cfg.NoVerify {
 		if j, err := s.startJob(s.doVerify2); err == nil {
 			s.startupJob = j.id
@@ -150,7 +150,7 @@ var webVendor = func() http.Handler {
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !s.hostOK(r) {
-		writeJSON(w, 403, map[string]string{"error": "host non consentito"})
+		writeJSON(w, 403, map[string]string{"error": "host not allowed"})
 		return
 	}
 	p := r.URL.Path
@@ -165,23 +165,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case p == "/api/job":
 		if !s.authorised(r) {
-			writeJSON(w, 403, map[string]string{"error": "token mancante"})
+			writeJSON(w, 403, map[string]string{"error": "missing token"})
 			return
 		}
 		if j := s.job(r.URL.Query().Get("id")); j != nil {
 			writeJSON(w, 200, j.view())
 		} else {
-			writeJSON(w, 404, map[string]string{"error": "operazione sconosciuta"})
+			writeJSON(w, 404, map[string]string{"error": "unknown operation"})
 		}
 	case p == "/api/search":
 		if !s.authorised(r) {
-			writeJSON(w, 403, map[string]string{"error": "token mancante"})
+			writeJSON(w, 403, map[string]string{"error": "missing token"})
 			return
 		}
 		writeJSON(w, 200, map[string]any{"rows": s.searchText(r.URL.Query())})
 	case p == "/api/state":
 		if !s.authorised(r) {
-			writeJSON(w, 403, map[string]string{"error": "token mancante"})
+			writeJSON(w, 403, map[string]string{"error": "missing token"})
 			return
 		}
 		writeJSON(w, 200, s.state())
@@ -217,15 +217,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 	if !s.authorised(r) {
-		writeJSON(w, 403, map[string]string{"error": "token mancante o host non consentito"})
+		writeJSON(w, 403, map[string]string{"error": "missing token or host not allowed"})
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, 20_000_000))
 	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "richiesta non valida"})
+		writeJSON(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
-	bad := func(e error) { writeJSON(w, 400, map[string]string{"error": "richiesta non valida: " + e.Error()}) }
+	bad := func(e error) { writeJSON(w, 400, map[string]string{"error": "invalid request: " + e.Error()}) }
 	startJob := func(fn func(*Job) (any, error)) {
 		j, err := s.startJob(fn)
 		if err != nil {
@@ -256,7 +256,7 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 			ID string `json:"id"`
 		}
 		if err := json.Unmarshal(body, &d); err != nil || d.ID == "" {
-			writeJSON(w, 400, map[string]string{"error": "richiesta non valida: id mancante"})
+			writeJSON(w, 400, map[string]string{"error": "invalid request: missing id"})
 			return
 		}
 		s.opMu.Lock()
@@ -281,14 +281,14 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 			Confirm string `json:"confirm"`
 		}
 		json.Unmarshal(body, &d)
-		if d.Confirm != "ELIMINA" {
-			fail(w, refuse("conferma mancante"))
+		if d.Confirm != "DELETE" {
+			fail(w, refuse("confirmation missing"))
 			return
 		}
 		startJob(func(j *Job) (any, error) { return s.doEmpty(d.Confirm, j) })
 	case "/api/verify":
 		startJob(s.doVerify)
 	default:
-		writeJSON(w, 404, map[string]string{"error": "azione sconosciuta"})
+		writeJSON(w, 404, map[string]string{"error": "unknown action"})
 	}
 }

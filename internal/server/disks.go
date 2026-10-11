@@ -39,32 +39,32 @@ type Src struct {
 
 func (s *Server) mountCandidates() []string {
 	var out []string
-	if runtime.GOOS == "windows" {
-		for c := 'A'; c <= 'Z'; c++ {
-			p := string(c) + `:\`
-			if _, err := os.Stat(p); err == nil {
-				out = append(out, p)
+	var bases []string
+	if !s.cfg.NoDefaultMounts {
+		if runtime.GOOS == "windows" {
+			for c := 'A'; c <= 'Z'; c++ { // each drive letter is itself a disk
+				p := string(c) + `:\`
+				if _, err := os.Stat(p); err == nil {
+					out = append(out, p)
+				}
 			}
-		}
-	} else {
-		var bases []string
-		if !s.cfg.NoDefaultMounts {
+		} else {
 			bases = append(bases, "/Volumes", "/media", "/mnt", "/run/media")
 		}
-		bases = append(bases, s.cfg.Mounts...)
-		for _, b := range bases {
-			ents, err := os.ReadDir(b)
-			if err != nil {
-				continue
-			}
-			for _, e := range ents {
-				p := filepath.Join(b, e.Name())
-				out = append(out, p)
-				if b == "/run/media" { // /run/media/<user>/<disk>
-					if subs, err := os.ReadDir(p); err == nil {
-						for _, sub := range subs {
-							out = append(out, filepath.Join(p, sub.Name()))
-						}
+	}
+	bases = append(bases, s.cfg.Mounts...) // --mounts works on every system
+	for _, b := range bases {
+		ents, err := os.ReadDir(b)
+		if err != nil {
+			continue
+		}
+		for _, e := range ents {
+			p := filepath.Join(b, e.Name())
+			out = append(out, p)
+			if b == "/run/media" { // /run/media/<user>/<disk>
+				if subs, err := os.ReadDir(p); err == nil {
+					for _, sub := range subs {
+						out = append(out, filepath.Join(p, sub.Name()))
 					}
 				}
 			}
@@ -180,7 +180,7 @@ func (s *Server) listSources() ([]*Src, []*Disk) {
 			rows.Close()
 			hint := filepath.Base(d.Root)
 			if hint == "" || hint == "." {
-				hint = "disco"
+				hint = "disk"
 			}
 			for _, x := range rs {
 				real := idx.ResolveRoot(db, x.id, x.root, d.Root)
@@ -200,7 +200,7 @@ func (s *Server) listSources() ([]*Src, []*Disk) {
 				var id, at int64
 				var label, root string
 				if rows.Scan(&id, &label, &root, &at) == nil {
-					srcs = append(srcs, &Src{Label: uniq(label, "istantanea"), Raw: label, DB: f, SID: id, Root: root, Kind: "snapshot", ScannedAt: at})
+					srcs = append(srcs, &Src{Label: uniq(label, "snapshot"), Raw: label, DB: f, SID: id, Root: root, Kind: "snapshot", ScannedAt: at})
 				}
 			}
 			rows.Close()
