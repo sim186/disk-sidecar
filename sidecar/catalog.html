@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="sidecar-token" content="">
+<title>Sidecar</title>
+<style>
+@font-face { font-family: "Atkinson Hyperlegible"; font-weight: 400; font-display: swap; src: url("vendor/fonts/atkinson-400.woff2") format("woff2"); }
+@font-face { font-family: "Atkinson Hyperlegible"; font-weight: 700; font-display: swap; src: url("vendor/fonts/atkinson-700.woff2") format("woff2"); }
+
+:root {
+  --ground: #e8ebef; --rail: #dde1e7; --paper: #f3f5f8; --ink: #1a2130; --muted: #5a6578; --rule: #c8ceda; --hover: #dfe3ea;
+  --keep: oklch(.46 .11 160); --delete: oklch(.5 .17 27); --review: oklch(.5 .12 75);
+  --k-photo: oklch(.5 .10 245); --k-video: oklch(.5 .11 330); --k-audio: oklch(.52 .12 55); --k-document: oklch(.5 .10 150);
+  --k-code: oklch(.5 .09 100); --k-installer: oklch(.5 .03 265); --k-archive: oklch(.5 .13 28); --k-lightroom: oklch(.5 .08 200); --k-other: oklch(.48 .01 260);
+  --font: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #14171d; --rail: #1a1e26; --paper: #1f242d; --ink: #e7eaf0; --muted: #8c96a6; --rule: #2b323d; --hover: #222833;
+    --keep: oklch(.74 .12 160); --delete: oklch(.72 .15 27); --review: oklch(.78 .12 80);
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #14171d; --rail: #1a1e26; --paper: #1f242d; --ink: #e7eaf0; --muted: #8c96a6; --rule: #2b323d; --hover: #222833;
+  --keep: oklch(.74 .12 160); --delete: oklch(.72 .15 27); --review: oklch(.78 .12 80);
+}
+
+* { box-sizing: border-box; }
+html { font-size: 15px; }
+body { margin: 0; background: var(--ground); color: var(--ink); font: 1rem/1.5 var(--font); font-variant-numeric: tabular-nums; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.hide { display: none !important; }
+.muted { color: var(--muted); }
+
+/* shell: the rail is the "sidecar" */
+#app { display: grid; grid-template-columns: 16.5rem minmax(0, 1fr); min-height: 100vh; }
+#rail { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--rail); padding: 1.6rem 1.2rem 1.2rem; display: flex; flex-direction: column; gap: 1.8rem; }
+.brand { display: flex; align-items: baseline; gap: .6rem; padding: 0 .4rem; }
+.brand .word { font-size: 1.55rem; font-weight: 700; letter-spacing: -.02em; }
+.brand .ver { font-size: .8rem; color: var(--muted); }
+#nav { display: flex; flex-direction: column; }
+#nav button { text-align: left; background: none; border: 0; padding: .45rem .7rem; cursor: pointer; border-radius: 2px; display: flex; justify-content: space-between; }
+#nav button:hover { background: var(--hover); }
+#nav button.on { background: var(--ink); color: var(--ground); }
+#nav .n { opacity: .65; }
+#rail h2 { font-size: .85rem; font-weight: 400; color: var(--muted); margin: 0 0 .35rem; padding: 0 .4rem; }
+#disks { list-style: none; margin: 0; padding: 0; }
+#disks button { width: 100%; text-align: left; background: none; border: 0; padding: .5rem .7rem .55rem; cursor: pointer; border-radius: 2px; }
+#disks button:hover { background: var(--hover); }
+#disks button.on { background: var(--paper); }
+#disks .name { display: block; font-weight: 700; overflow-wrap: anywhere; }
+#disks .meta { display: block; font-size: .85rem; color: var(--muted); }
+#disks .meter { display: block; height: 3px; margin-top: .35rem; background: var(--rule); }
+#disks .meter i { display: block; height: 100%; background: var(--ink); }
+#rail .foot { margin-top: auto; padding: 0 .4rem; font-size: .88rem; color: var(--muted); }
+#rail .foot button { margin-top: .4rem; }
+
+main { padding: 2.4rem 3rem 4rem; max-width: 1240px; width: 100%; }
+h1 { font-size: 1.9rem; line-height: 1.15; letter-spacing: -.015em; margin: 0 0 .35rem; font-weight: 700; overflow-wrap: anywhere; }
+h1 a { color: var(--muted); font-weight: 400; cursor: pointer; text-decoration: none; }
+h1 a:hover { color: var(--ink); text-decoration: underline; }
+h1 .sep { color: var(--muted); font-weight: 400; margin: 0 .25em; }
+.lede { margin: 0 0 1.4rem; color: var(--muted); max-width: 72ch; }
+h3 { font-size: 1.1rem; margin: 2rem 0 .3rem; }
+
+.btn { background: none; border: 1px solid var(--ink); padding: .35rem .85rem; cursor: pointer; border-radius: 2px; }
+.btn:hover { background: var(--ink); color: var(--ground); }
+.btn.danger { border-color: var(--delete); color: var(--delete); }
+.btn.danger:hover { background: var(--delete); color: var(--ground); }
+.btn.quiet { border-color: transparent; padding-left: 0; padding-right: 0; text-decoration: underline; text-underline-offset: 3px; }
+.btn.quiet:hover { background: none; color: var(--ink); text-decoration-thickness: 2px; }
+.row { display: flex; flex-wrap: wrap; gap: .8rem 1.2rem; align-items: center; margin: 0 0 1.2rem; }
+input[type=search], input[type=text], select { background: transparent; border: 0; border-bottom: 2px solid var(--ink); padding: .35rem .1rem; border-radius: 0; min-width: 0; }
+input[type=search] { flex: 1 1 22rem; font-size: 1.25rem; }
+select { padding-right: .3rem; cursor: pointer; }
+select option { background: var(--paper); color: var(--ink); }
+input::placeholder { color: var(--muted); }
+
+/* data colours: the only colour in the interface */
+.kinds { display: flex; flex-wrap: wrap; gap: .3rem 1.1rem; margin: .9rem 0 1.4rem; }
+.kinds button { background: none; border: 0; padding: .1rem 0; cursor: pointer; display: inline-flex; align-items: center; gap: .4rem; }
+.kinds button:hover span.t { text-decoration: underline; }
+.kinds button.on span.t { font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.kinds i, .dot { display: inline-block; width: .65rem; height: .65rem; background: var(--k-other); }
+.kinds .sz { color: var(--muted); }
+#treemap { position: relative; overflow: hidden; width: 100%; height: clamp(320px, 48vh, 540px); }
+.tile { position: absolute; box-shadow: inset 0 0 0 1px var(--ground); padding: .4rem .55rem; overflow: hidden; color: #fff; cursor: default; line-height: 1.25; font-size: .85rem; }
+.tile.dir { cursor: pointer; }
+.tile:hover { filter: brightness(1.14); }
+.tile b { display: block; font-size: .95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile.m-keep { box-shadow: inset 0 0 0 4px var(--keep), inset 0 0 0 5px var(--ground); }
+.tile.m-delete { box-shadow: inset 0 0 0 4px var(--delete), inset 0 0 0 5px var(--ground); }
+.tile.m-review { box-shadow: inset 0 0 0 4px var(--review), inset 0 0 0 5px var(--ground); }
+
+table { width: 100%; border-collapse: collapse; margin-top: 1.2rem; }
+th { text-align: left; font-weight: 400; color: var(--muted); font-size: .85rem; padding: .3rem 1rem .5rem 0; border-bottom: 2px solid var(--ink); }
+td { padding: .5rem 1rem .5rem 0; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+tr:hover td { background: var(--hover); }
+td.num, th.num { text-align: right; white-space: nowrap; }
+td.path { overflow-wrap: anywhere; }
+.link { cursor: pointer; font-weight: 700; }
+.link:hover { text-decoration: underline; }
+mark { background: transparent; color: inherit; font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; }
+
+/* marks: three words, the chosen one coloured */
+.mk { display: inline-flex; gap: .7rem; white-space: nowrap; }
+.mk button { background: none; border: 0; padding: 0; cursor: pointer; color: var(--muted); font-size: .88rem; }
+.mk button:hover { color: var(--ink); text-decoration: underline; }
+.mk button.on { font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.mk button.on[data-m=keep] { color: var(--keep); }
+.mk button.on[data-m=delete] { color: var(--delete); }
+.mk button.on[data-m=review] { color: var(--review); }
+
+.group { padding: .9rem 0 1rem; border-top: 2px solid var(--ink); }
+.group h4 { margin: 0 0 .4rem; font-size: 1rem; }
+.group div { overflow-wrap: anywhere; padding: .15rem 0; display: flex; gap: 1rem; }
+.group .mk { flex: none; }
+.figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 2rem; margin: 1rem 0 .4rem; }
+.figures div { border-top: 2px solid var(--ink); padding-top: .5rem; }
+.figures b { display: block; font-size: 1.6rem; line-height: 1.15; letter-spacing: -.01em; }
+.verdict { border: 2px solid var(--keep); padding: .8rem 1rem; margin: 1rem 0; }
+
+#drop { max-width: 34rem; margin: 18vh auto 0; padding: 0 1.5rem; }
+#drop .word { font-size: 1.55rem; font-weight: 700; letter-spacing: -.02em; }
+#drop.over { outline: 2px dashed var(--ink); outline-offset: 1rem; }
+
+#busy { position: fixed; inset: 0; background: color-mix(in srgb, var(--ground) 82%, transparent); display: flex; align-items: center; justify-content: center; z-index: 50; }
+#busy .panel { background: var(--paper); border: 2px solid var(--ink); padding: 1.4rem 1.6rem; width: min(32rem, 90vw); }
+#busy h3 { margin: 0 0 .9rem; }
+#busy .bar { height: 6px; background: var(--rule); }
+#busy .bar i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .3s; }
+#busy .txt { margin-top: .6rem; overflow-wrap: anywhere; }
+#toast { position: fixed; left: 1.2rem; bottom: 1.2rem; background: var(--ink); color: var(--ground); padding: .65rem 1rem; border-radius: 2px; max-width: min(36rem, 90vw); z-index: 60; }
+
+@media (max-width: 880px) {
+  #app { grid-template-columns: 1fr; }
+  #rail { position: static; height: auto; gap: 1.2rem; }
+  #nav { flex-direction: row; flex-wrap: wrap; }
+  main { padding: 1.6rem 1.2rem 3rem; }
+  .figures { grid-template-columns: 1fr; gap: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="drop">
+  <div class="word">sidecar</div>
+  <p id="dropmsg">Carico l'indice…</p>
+  <p class="muted">Se non parte da solo, trascina qui il file <b>index.db</b> oppure sceglilo.</p>
+  <input type="file" id="pick" accept=".db,.sqlite">
+</div>
+
+<div id="app" class="hide">
+  <aside id="rail">
+    <div class="brand"><span class="word">sidecar</span><span class="ver" id="ver"></span></div>
+    <nav id="nav">
+      <button data-tab="map" class="on">Mappa</button>
+      <button data-tab="search">Cerca</button>
+      <button data-tab="dups">Duplicati</button>
+      <button data-tab="cmp">Confronta</button>
+      <button data-tab="marks">Segnati <span class="n" id="nmarks"></span></button>
+      <button data-tab="quar" id="navquar" class="hide">Quarantena <span class="n" id="nquar"></span></button>
+    </nav>
+    <div>
+      <h2>Dischi</h2>
+      <ul id="disks"></ul>
+    </div>
+    <div class="foot">
+      <div id="vstatus"></div>
+      <button class="btn hide" id="verify-now">Verifica ora</button>
+    </div>
+  </aside>
+
+  <main>
+    <section id="tab-map">
+      <h1 id="crumbs"></h1>
+      <p class="lede" id="mapinfo"></p>
+      <div class="kinds" id="legend"></div>
+      <div id="treemap"></div>
+      <table id="listing"></table>
+    </section>
+
+    <section id="tab-search" class="hide">
+      <h1>Cerca</h1>
+      <div class="row">
+        <input type="search" id="q" placeholder="Nome o parole dentro i file" autocomplete="off">
+        <select id="sscope" aria-label="Dove cercare"><option value="both">Nomi e contenuto</option><option value="name">Solo nomi</option><option value="text">Solo contenuto</option></select>
+        <select id="skind" aria-label="Tipo di file"></select>
+      </div>
+      <p class="lede" id="sinfo"></p>
+      <table id="results"></table>
+    </section>
+
+    <section id="tab-dups" class="hide">
+      <h1>Duplicati</h1>
+      <p class="lede" id="dinfo"></p>
+      <div id="dgroups"></div>
+    </section>
+
+    <section id="tab-cmp" class="hide">
+      <h1>Confronta</h1>
+      <p class="lede">Scegli due cartelle, anche su dischi diversi. Due file sono uguali se hanno lo stesso SHA-256; se un file non ha l'hash, contano nome e dimensione uguali.</p>
+      <div class="row">
+        <span>A</span><select id="cmp-sa" aria-label="Disco di A"></select>
+        <input type="text" id="cmp-a" list="folders" size="34" placeholder="cartella (vuoto: tutto il disco)">
+      </div>
+      <div class="row">
+        <span>B</span><select id="cmp-sb" aria-label="Disco di B"></select>
+        <input type="text" id="cmp-b" list="folders" size="34" placeholder="cartella">
+        <button class="btn" id="cmp-go">Confronta</button>
+        <datalist id="folders"></datalist>
+      </div>
+      <div id="cmp-out"></div>
+    </section>
+
+    <section id="tab-marks" class="hide">
+      <h1>Segnati</h1>
+      <p class="lede" id="minfo"></p>
+      <div class="row">
+        <button class="btn danger hide" id="do-quar">Sposta in quarantena i file da eliminare</button>
+        <button class="btn quiet" id="exp-csv">Esporta CSV</button>
+        <button class="btn quiet" id="exp-sh">Esporta elenco da eliminare</button>
+        <button class="btn quiet" id="clear-marks">Azzera segni</button>
+      </div>
+      <table id="marklist"></table>
+    </section>
+
+    <section id="tab-quar" class="hide">
+      <h1>Quarantena</h1>
+      <p class="lede" id="qinfo"></p>
+      <div class="row"><button class="btn danger" id="q-empty">Elimina definitivamente…</button></div>
+      <p class="muted" style="max-width:60ch">Qui i file non sono cancellati: stanno nella cartella <b>.sidecar/_quarantena</b> del loro disco. Puoi ripristinarli. Lo spazio si libera solo quando elimini definitivamente.</p>
+      <table id="quarlist"></table>
+    </section>
+  </main>
+
+  <div id="busy" class="hide"><div class="panel">
+    <h3 id="busy-title">…</h3>
+    <div class="bar"><i id="busy-bar"></i></div>
+    <div class="txt" id="busy-text"></div>
+    <div class="muted" style="margin-top:.5rem;font-size:.85rem">Lascia aperta questa pagina finché non finisce.</div>
+  </div></div>
+  <div id="toast" class="hide" role="status"></div>
+</div>
+
+<script src="vendor/sql-wasm.js"></script>
+<script>
+const KINDS = ['photo', 'video', 'audio', 'document', 'code', 'installer', 'archive', 'lightroom', 'other'];
+const KIND_LABEL = { photo: 'Foto', video: 'Video', audio: 'Audio', document: 'Documenti', code: 'Codice', installer: 'Installer', archive: 'Archivi', lightroom: 'Lightroom', other: 'Altro' };
+const kcol = k => `var(--k-${KINDS.includes(k) ? k : 'other'})`;
+const $ = s => document.querySelector(s);
+const nf = new Intl.NumberFormat('it', { useGrouping: 'always' });
+const fmt = b => { const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (b >= 1024 && i < 4) { b /= 1024; i++; }
+  return (i ? b.toLocaleString('it', { minimumFractionDigits: b < 100 ? 1 : 0, maximumFractionDigits: b < 100 ? 1 : 0 }) : b) + ' ' + u[i]; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const srcName = s => s.label + (s.kind === 'snapshot' ? ' (istantanea del ' + new Date(s.scanned_at * 1000).toLocaleDateString('it') + ')' : '');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const theme = new URLSearchParams(location.search).get('theme');
+if (theme === 'dark' || theme === 'light') document.documentElement.dataset.theme = theme;
+const diskParam = new URLSearchParams(location.search).get('disk');   // ?disk=2 opens that disk
+
+let db, sources = [], state = { source: 'all', kind: 'all', prefix: '' };
+
+/* ---------- marks: kept in the index of the disk the file lives on (saved by the server);
+   without the server they stay in this browser only ---------- */
+let marks = {};
+const mkey = (sid, p) => sid + '|' + p;
+function loadMarks() {
+  marks = {};
+  try { q('SELECT source_id, path, mark FROM marks').forEach(r => { marks[mkey(r.source_id, r.path)] = r.mark; }); } catch (e) {}
+  if (!TOKEN) { try { Object.assign(marks, JSON.parse(localStorage.getItem('sidecar-marks') || '{}')); } catch (e) {} }
+}
+function setMark(sid, p, m) {
+  const k = mkey(sid, p), prev = marks[k], next = prev === m ? null : m;
+  if (next) marks[k] = next; else delete marks[k];
+  if (TOKEN && actions) {
+    const label = (sources.find(s => s.id === sid) || {}).label;
+    api('api/marks', { items: [{ source: label, path: p, mark: next }] }).catch(e => {
+      if (prev) marks[k] = prev; else delete marks[k];
+      toast('Segno non salvato: ' + e.message); rerenderCurrent();
+    });
+  } else { try { localStorage.setItem('sidecar-marks', JSON.stringify(marks)); } catch (e) {} }
+}
+const currentTab = () => (document.querySelector('#nav button.on') || {}).dataset.tab;
+function rerenderCurrent() { const b = document.querySelector('#nav button.on'); if (b) b.click(); }
+function markOf(sid, p) { // a mark on a folder covers everything inside it
+  const parts = p.split('/');
+  for (let i = parts.length; i > 0; i--) { const m = marks[mkey(sid, parts.slice(0, i).join('/'))]; if (m) return m; }
+  return '';
+}
+const MK = { keep: 'tieni', delete: 'elimina', review: 'vedi' };
+const mkButtons = (sid, p) => '<span class="mk">' + Object.keys(MK).map(m =>
+  `<button data-m="${m}" data-sid="${sid}" data-p="${esc(p)}" class="${marks[mkey(sid, p)] === m ? 'on' : ''}">${MK[m]}</button>`).join('') + '</span>';
+
+/* ---------- db helpers ---------- */
+function q(sql, params = []) {
+  const st = db.prepare(sql); st.bind(params); const rows = [];
+  while (st.step()) rows.push(st.getAsObject());
+  st.free(); return rows;
+}
+function where(withKind = true) {
+  const w = [], p = [];
+  if (state.source !== 'all') { w.push('source_id = ?'); p.push(+state.source); }
+  if (withKind && state.kind !== 'all') { w.push('kind = ?'); p.push(state.kind); }
+  return [w.length ? ' AND ' + w.join(' AND ') : '', p];
+}
+
+/* ---------- local server (only when the page is served by serve.py) ---------- */
+const TOKEN = (document.querySelector('meta[name=sidecar-token]') || {}).content || '';
+let actions = false, quarState = { quarantine: [] }, watchedJob = null;
+async function api(path, body) {
+  const r = await fetch(path, { method: body ? 'POST' : 'GET', cache: 'no-store',
+    headers: { 'X-Sidecar-Token': TOKEN, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('errore ' + r.status));
+  return j;
+}
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.remove('hide'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('hide'), 7000); }
+async function runJob(path, body, title) {
+  $('#busy-title').textContent = title; $('#busy-bar').style.width = '0%'; $('#busy-text').textContent = 'Avvio…';
+  $('#busy').classList.remove('hide');
+  const t0 = Date.now();
+  try {
+    const { job } = await api(path, body);
+    for (;;) {
+      await sleep(500);
+      const j = await api('api/job?id=' + job);
+      const pct = j.total ? Math.min(100, Math.round(j.done / j.total * 100)) : 0;
+      $('#busy-bar').style.width = (j.state === 'done' ? 100 : pct) + '%';
+      const secs = (Date.now() - t0) / 1000;
+      const eta = j.total && j.done > 50 && j.state === 'running' ? `, mancano circa ${Math.max(1, Math.round(secs / j.done * (j.total - j.done)))} s` : '';
+      $('#busy-text').textContent = j.phase + (j.total ? ` ${nf.format(Math.min(j.done, j.total))} di ${nf.format(j.total)} file (${pct}%${eta})` : '');
+      if (j.state === 'done') return j.result;
+      if (j.state === 'error') throw new Error(j.error);
+    }
+  } finally { $('#busy').classList.add('hide'); }
+}
+async function refreshActions() {
+  actions = false;
+  if (TOKEN) { try { quarState = await api('api/state'); actions = true; } catch (e) {} }
+  $('#navquar').classList.toggle('hide', !actions);
+  $('#verify-now').classList.toggle('hide', !actions);
+  $('#do-quar').classList.toggle('hide', !actions);
+  if (actions) {
+    $('#nquar').textContent = quarState.quarantine.length || '';
+    if (quarState.version) $('#ver').textContent = 'v' + quarState.version;
+    if (quarState.warnings && quarState.warnings.length) toast(quarState.warnings[0]);
+    if (quarState.startup_job && quarState.startup_job !== watchedJob) { watchedJob = quarState.startup_job; watchVerify(watchedJob); }
+  }
+}
+async function reloadDb(tab) {
+  const r = await fetch('index.db', { cache: 'no-store' });
+  open(new Uint8Array(await r.arrayBuffer()), true);
+  await refreshActions();
+  const b = document.querySelector(`#nav button[data-tab="${tab || 'map'}"]`); if (b) b.click();
+}
+
+/* ---------- what changed by hand since last time ---------- */
+$('#verify-now').onclick = async () => {
+  try { const { job } = await api('api/verify', {}); watchedJob = job; await watchVerify(job); }
+  catch (e) { toast('Verifica non avviata: ' + e.message); }
+};
+async function watchVerify(jobId) {
+  const st = $('#vstatus');
+  try {
+    for (;;) {
+      const j = await api('api/job?id=' + jobId);
+      if (j.state === 'running') {
+        st.textContent = 'Verifico ' + j.phase.replace(/^Verifico /, '').replace('…', '') + (j.total ? `: ${nf.format(Math.min(j.done, j.total))} di ${nf.format(j.total)}` : '');
+        await sleep(700); continue;
+      }
+      if (j.state === 'error') { st.textContent = 'Verifica non riuscita: ' + j.error; return; }
+      const r = j.result, changed = r.new + r.changed + r.removed, at = new Date(r.at * 1000).toLocaleTimeString('it', { hour: '2-digit', minute: '2-digit' });
+      if (!changed) { st.textContent = `Verificato alle ${at}, nessun cambiamento.`; return; }
+      const parts = [];
+      if (r.new) parts.push(`${nf.format(r.new)} nuovi`); if (r.changed) parts.push(`${nf.format(r.changed)} modificati`); if (r.removed) parts.push(`${nf.format(r.removed)} spariti`);
+      st.textContent = `Verificato alle ${at}: ${parts.join(', ')}.`;
+      toast(`Dall'ultima volta sono cambiati a mano: ${parts.join(', ')}. L'indice è aggiornato.`);
+      await reloadDb(currentTab());
+      return;
+    }
+  } catch (e) { st.textContent = 'Verifica non riuscita: ' + e.message; }
+}
+
+/* ---------- load ---------- */
+async function boot() {
+  window.SQL = await initSqlJs({ locateFile: f => 'vendor/' + f });
+  try {
+    const r = await fetch('index.db'); if (!r.ok) throw 0;
+    open(new Uint8Array(await r.arrayBuffer()));
+  } catch (e) {
+    $('#dropmsg').textContent = 'Apri il file index.db per cominciare.';
+  }
+}
+function open(bytes, fromReload) {
+  db = new SQL.Database(bytes);
+  try { sources = q('SELECT id, label, scanned_at, kind FROM sources ORDER BY id'); }
+  catch (e) { sources = q('SELECT id, label, scanned_at FROM sources ORDER BY id'); }
+  if (diskParam && !fromReload && sources.some(s => s.id === +diskParam)) state.source = String(+diskParam);
+  if (state.source !== 'all' && !sources.some(s => s.id === +state.source)) state.source = 'all';
+  loadMarks();
+  try { db.exec('SELECT 1 FROM file_text LIMIT 1'); window.hasText = true; } catch (e) { window.hasText = false; }
+  try { const v = q("SELECT value FROM meta WHERE key='sidecar_version'")[0]; if (v && !$('#ver').textContent) $('#ver').textContent = 'v' + v.value; } catch (e) {}
+  const kopt = '<option value="all">Tutti i tipi</option>' + KINDS.map(k => `<option value="${k}">${KIND_LABEL[k]}</option>`).join('');
+  $('#skind').innerHTML = kopt;
+  $('#drop').classList.add('hide'); $('#app').classList.remove('hide');
+  renderRail();
+  renderMap();
+  if (fromReload) return;
+  refreshActions().then(() => { const t = location.hash.slice(1); if (t) { const b = document.querySelector(`#nav button[data-tab="${t}"]`); if (b) b.click(); } });
+}
+$('#pick').onchange = async e => { const f = e.target.files[0]; if (f) open(new Uint8Array(await f.arrayBuffer())); };
+const dz = $('#drop');
+dz.ondragover = e => { e.preventDefault(); dz.classList.add('over'); };
+dz.ondragleave = () => dz.classList.remove('over');
+dz.ondrop = async e => { e.preventDefault(); dz.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) open(new Uint8Array(await f.arrayBuffer())); };
+
+/* ---------- the rail: disks as the global filter ---------- */
+function renderRail() {
+  const per = q('SELECT source_id sid, COUNT(*) n, COALESCE(SUM(size),0) s FROM files GROUP BY source_id');
+  const by = Object.fromEntries(per.map(r => [r.sid, r]));
+  const total = per.reduce((s, r) => s + r.s, 0), n = per.reduce((s, r) => s + r.n, 0);
+  const row = (id, name, meta, share) => `<li><button data-src="${id}" class="${String(state.source) === String(id) ? 'on' : ''}">
+    <span class="name">${esc(name)}</span><span class="meta">${meta}</span>${sources.length > 1 ? `<span class="meter"><i style="width:${Math.max(2, Math.round(share * 100))}%"></i></span>` : ''}</button></li>`;
+  $('#disks').innerHTML = (sources.length > 1 ? row('all', 'Tutti i dischi', `${fmt(total)}, ${nf.format(n)} file`, 1) : '') +
+    sources.map(s => { const r = by[s.id] || { n: 0, s: 0 };
+      const snap = s.kind === 'snapshot' ? `istantanea del ${new Date(s.scanned_at * 1000).toLocaleDateString('it')}, ` : '';
+      return row(s.id, s.label, `${snap}${fmt(r.s)}, ${nf.format(r.n)} file`, total ? r.s / total : 0); }).join('');
+  $('#disks').querySelectorAll('[data-src]').forEach(b => b.onclick = () => {
+    state.source = b.dataset.src; state.prefix = ''; renderRail(); rerenderCurrent();
+  });
+  if (sources.length === 1) state.source = String(sources[0].id);
+  $('#nmarks').textContent = Object.keys(marks).length || '';
+}
+document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x === b));
+  ['map', 'search', 'dups', 'cmp', 'marks', 'quar'].forEach(t => $('#tab-' + t).classList.toggle('hide', t !== b.dataset.tab));
+  $('#nmarks').textContent = Object.keys(marks).length || '';
+  ({ map: renderMap, search: runSearch, dups: renderDups, cmp: initCmp, marks: renderMarks, quar: renderQuar })[b.dataset.tab]();
+});
+
+/* ---------- treemap ---------- */
+const prefixOf = () => state.prefix ? state.prefix + '/' : '';
+function children() {
+  const pre = prefixOf(); const [w, p] = where();
+  return q(`SELECT name, isdir, SUM(size) size, COUNT(*) n, MIN(sid) sid, kind FROM (
+      SELECT source_id sid, size, kind,
+        CASE WHEN instr(seg,'/')>0 THEN substr(seg,1,instr(seg,'/')-1) ELSE seg END name,
+        instr(seg,'/')>0 isdir
+      FROM (SELECT source_id, size, kind, substr(path, ?) seg FROM files WHERE substr(path,1,?) = ? ${w}))
+    GROUP BY name, isdir ORDER BY size DESC`, [pre.length + 1, pre.length, pre, ...p]);
+}
+function kindTotals() {
+  const pre = prefixOf(); const [w, p] = where(false);
+  return Object.fromEntries(q(`SELECT kind, SUM(size) s FROM files WHERE substr(path,1,?) = ? ${w} GROUP BY kind`, [pre.length, pre, ...p]).map(r => [r.kind, r.s]));
+}
+function dominantKind(name) {
+  const pre = prefixOf() + name + '/'; const [w, p] = where();
+  const r = q(`SELECT kind FROM files WHERE substr(path,1,?) = ? ${w} GROUP BY kind ORDER BY SUM(size) DESC LIMIT 1`, [pre.length, pre, ...p]);
+  return r.length ? r[0].kind : 'other';
+}
+function squarify(items, x, y, w, h) { // items sorted by value, descending
+  const out = []; const total = items.reduce((s, i) => s + i.v, 0); if (!total) return out;
+  const scale = (w * h) / total; let rest = items.map(i => ({ ...i, a: i.v * scale }));
+  while (rest.length) {
+    const short = Math.min(w, h), row = [rest[0]]; let sum = rest[0].a;
+    const worst = (r, s) => { const mx = Math.max(...r.map(i => i.a)), mn = Math.min(...r.map(i => i.a)); return Math.max(short * short * mx / (s * s), s * s / (short * short * mn)); };
+    let i = 1;
+    while (i < rest.length && worst([...row, rest[i]], sum + rest[i].a) <= worst(row, sum)) { row.push(rest[i]); sum += rest[i].a; i++; }
+    rest = rest.slice(row.length);
+    if (w >= h) { const rw = sum / h; let cy = y; row.forEach(r => { const rh = r.a / rw; out.push({ ...r, x, y: cy, w: rw, h: rh }); cy += rh; }); x += rw; w -= rw; }
+    else { const rh = sum / w; let cx = x; row.forEach(r => { const rw = r.a / rh; out.push({ ...r, x: cx, y, w: rw, h: rh }); cx += rw; }); y += rh; h -= rh; }
+  }
+  return out;
+}
+function sourceRows() { // with several disks, the first level is the disk itself, never a mix of their folders
+  const kw = state.kind === 'all' ? '' : ' AND kind = ?', kp = state.kind === 'all' ? [] : [state.kind];
+  return q(`SELECT source_id sid, SUM(size) size, COUNT(*) n FROM files WHERE 1 ${kw} GROUP BY source_id ORDER BY size DESC`, kp)
+    .map(r => ({ ...r, name: (sources.find(s => s.id === r.sid) || {}).label || '?', isdir: 1,
+      kind: (q(`SELECT kind FROM files WHERE source_id = ? ${kw} GROUP BY kind ORDER BY SUM(size) DESC LIMIT 1`, [r.sid, ...kp])[0] || {}).kind }));
+}
+function renderMap() {
+  const bySource = state.source === 'all' && !state.prefix && sources.length > 1;
+  const kids = bySource ? sourceRows() : children();
+  const parts = state.prefix ? state.prefix.split('/') : [];
+  const rootName = state.source === 'all' ? 'Tutti i dischi' : ((sources.find(s => s.id === +state.source) || {}).label || 'Disco');
+  const crumbs = [`<a data-p="">${esc(rootName)}</a>`].concat(parts.map((p, i) => i === parts.length - 1 ? esc(p) : `<a data-p="${esc(parts.slice(0, i + 1).join('/'))}">${esc(p)}</a>`));
+  $('#crumbs').innerHTML = parts.length ? crumbs.join('<span class="sep">/</span>') : esc(rootName);
+  $('#crumbs').querySelectorAll('a').forEach(a => a.onclick = () => { state.prefix = a.dataset.p; renderMap(); });
+  const total = kids.reduce((s, k) => s + k.size, 0), files = kids.reduce((s, k) => s + k.n, 0);
+  $('#mapinfo').textContent = `${fmt(total)} in ${nf.format(files)} file` + (state.kind !== 'all' ? `, solo ${KIND_LABEL[state.kind].toLowerCase()}` : '') + (bySource ? '. Un clic su un disco lo apre.' : '. Un clic su una cartella la apre.');
+  const kt = kindTotals();
+  $('#legend').innerHTML = `<button data-k="all" class="${state.kind === 'all' ? 'on' : ''}"><span class="t">Tutto</span></button>` +
+    KINDS.filter(k => kt[k]).map(k => `<button data-k="${k}" class="${state.kind === k ? 'on' : ''}"><i style="background:${kcol(k)}"></i><span class="t">${KIND_LABEL[k]}</span><span class="sz">${fmt(kt[k])}</span></button>`).join('');
+  $('#legend').querySelectorAll('[data-k]').forEach(b => b.onclick = () => { state.kind = b.dataset.k; renderMap(); });
+  const tm = $('#treemap'); const W = tm.clientWidth, H = tm.clientHeight;
+  const tiles = squarify(kids.filter(k => k.size > 0).slice(0, 60).map(k => ({ ...k, v: k.size })), 0, 0, W, H).filter(t => t.w >= 3 && t.h >= 3);
+  tm.innerHTML = kids.length ? tiles.map(t => {
+    const kind = bySource ? t.kind : t.isdir ? dominantKind(t.name) : t.kind;
+    const m = bySource ? '' : markOf(t.sid, prefixOf() + t.name);
+    return `<div class="tile ${t.isdir ? 'dir' : ''} ${m ? 'm-' + m : ''}" data-name="${esc(t.name)}" data-dir="${t.isdir}" title="${esc(t.name)}: ${fmt(t.size)}, ${nf.format(t.n)} file"
+      style="left:${t.x}px;top:${t.y}px;width:${t.w}px;height:${t.h}px;background:${kcol(kind)}">${t.w > 70 && t.h > 36 ? `<b>${esc(t.name)}${t.isdir && !bySource ? '/' : ''}</b>${fmt(t.size)}` : ''}</div>`;
+  }).join('') : '';
+  tm.classList.toggle('hide', !kids.length);
+  tm.querySelectorAll('.tile.dir').forEach(el => el.onclick = () => {
+    if (bySource) { state.source = String(kids.find(k => k.name === el.dataset.name).sid); state.prefix = ''; renderRail(); }
+    else state.prefix = prefixOf() + el.dataset.name;
+    renderMap();
+  });
+  $('#listing').innerHTML = kids.length ? '<tr><th>Nome</th><th class="num">File</th><th class="num">Dimensione</th><th class="num">Quota</th><th>Segno</th></tr>' +
+    kids.slice(0, 200).map(k => {
+      const full = prefixOf() + k.name;
+      return `<tr><td>${k.isdir ? `<span class="link" ${bySource ? `data-src-go="${k.sid}"` : `data-go="${esc(full)}"`}>${esc(k.name)}${bySource ? '' : '/'}</span>` : esc(k.name)}</td><td class="num">${nf.format(k.n)}</td><td class="num">${fmt(k.size)}</td><td class="num">${total ? (k.size / total * 100).toLocaleString('it', { maximumFractionDigits: 1 }) : 0}%</td><td>${bySource ? '' : mkButtons(k.sid, full)}</td></tr>`;
+    }).join('') : '<tr><td class="muted">Niente da mostrare con questi filtri.</td></tr>';
+  $('#listing').querySelectorAll('[data-go]').forEach(a => a.onclick = () => { state.prefix = a.dataset.go; renderMap(); });
+  $('#listing').querySelectorAll('[data-src-go]').forEach(a => a.onclick = () => { state.source = a.dataset.srcGo; state.prefix = ''; renderRail(); renderMap(); });
+}
+
+/* ---------- search ---------- */
+let stimer;
+$('#q').oninput = () => { clearTimeout(stimer); stimer = setTimeout(runSearch, 250); };
+$('#sscope').onchange = $('#skind').onchange = runSearch;
+const ftsQuery = s => s.split(/\s+/).filter(Boolean).map(t => '"' + t.replace(/"/g, '""') + '"*').join(' ');
+function runSearch() {
+  const term = $('#q').value.trim(), scope = $('#sscope').value, kind = $('#skind').value;
+  if (term.length < 2) { $('#sinfo').textContent = 'Scrivi almeno due caratteri.'; $('#results').innerHTML = ''; return; }
+  let extra = '', ep = [];
+  if (kind !== 'all') { extra += ' AND f.kind = ?'; ep.push(kind); }
+  if (state.source !== 'all') { extra += ' AND f.source_id = ?'; ep.push(+state.source); }
+  let rows = [];
+  if (scope !== 'text') {
+    const like = '%' + term.replace(/[\\%_]/g, c => '\\' + c) + '%';
+    rows = rows.concat(q(`SELECT f.id, f.source_id sid, f.path, f.size, f.kind, 'nome' how FROM files f WHERE f.path LIKE ? ESCAPE '\\' ${extra} ORDER BY f.size DESC LIMIT 150`, [like, ...ep]));
+  }
+  if (scope !== 'name' && window.hasText) {
+    try { rows = rows.concat(q(`SELECT f.id, f.source_id sid, f.path, f.size, f.kind, 'contenuto' how FROM file_text t JOIN files f ON f.id = t.rowid WHERE file_text MATCH ? ${extra} LIMIT 150`, [ftsQuery(term), ...ep])); } catch (e) {}
+  }
+  const seen = new Set(); rows = rows.filter(r => seen.has(r.id) ? false : seen.add(r.id));
+  $('#sinfo').textContent = rows.length ? `${nf.format(rows.length)} risultati${rows.length >= 150 ? ', mostro i primi 150' : ''}.` : 'Nessun risultato.';
+  const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/&/g, '&amp;'), 'ig');
+  const hl = s => esc(s).replace(re, m => `<mark>${m}</mark>`);
+  $('#results').innerHTML = rows.length ? '<tr><th>Percorso</th><th>Tipo</th><th class="num">Dimensione</th><th>Trovato in</th><th>Segno</th></tr>' + rows.map(r =>
+    `<tr><td class="path">${hl(r.path)}</td><td><span class="dot" style="background:${kcol(r.kind)}"></span> ${KIND_LABEL[r.kind] || 'Altro'}</td><td class="num">${fmt(r.size)}</td><td>${r.how}</td><td>${mkButtons(r.sid, r.path)}</td></tr>`).join('') : '';
+}
+
+/* ---------- duplicates ---------- */
+function renderDups() {
+  const hasHash = q('SELECT COUNT(*) n FROM files WHERE sha256 IS NOT NULL')[0].n > 0;
+  const minSize = 1024 * 1024;
+  const only = state.source === 'all' ? '' : ' AND %K IN (SELECT %K FROM files WHERE source_id = ' + (+state.source) + ')';
+  let groups;
+  if (hasHash) {
+    groups = q(`SELECT sha256 k, COUNT(*) n, MIN(size) size FROM files WHERE sha256 IS NOT NULL${only.replace(/%K/g, 'sha256')} GROUP BY sha256 HAVING n > 1 ORDER BY size * (n - 1) DESC LIMIT 200`);
+  } else {
+    groups = q(`SELECT name || '|' || size k, COUNT(*) n, size FROM files WHERE size >= ?${only.replace(/%K/g, "name || '|' || size")} GROUP BY name, size HAVING n > 1 ORDER BY size * (n - 1) DESC LIMIT 200`, [minSize]);
+  }
+  const wasted = groups.reduce((s, g) => s + g.size * (g.n - 1), 0);
+  $('#dinfo').textContent = (hasHash
+    ? `File identici (stesso SHA-256): ${nf.format(groups.length)} gruppi. `
+    : `File probabilmente uguali (stesso nome e dimensione, da 1 MB): ${nf.format(groups.length)} gruppi. Per la certezza lancia hash_dups.py. `) +
+    `Eliminando tutte le copie in più si liberano ${fmt(wasted)}.`;
+  $('#dgroups').innerHTML = groups.map(g => {
+    const files = hasHash ? q('SELECT source_id sid, path, size FROM files WHERE sha256 = ? ORDER BY path', [g.k])
+      : q('SELECT source_id sid, path, size FROM files WHERE name || \'|\' || size = ? ORDER BY path', [g.k]);
+    return `<div class="group"><h4>${g.n} copie da ${fmt(g.size)}, in più ${fmt(g.size * (g.n - 1))}</h4>` +
+      files.map(f => `<div>${mkButtons(f.sid, f.path)}<span>${esc(f.path)} <span class="muted">${esc((sources.find(s => s.id === f.sid) || {}).label || '')}</span></span></div>`).join('') + '</div>';
+  }).join('');
+}
+
+/* ---------- compare two folders ---------- */
+let cmpReady = false;
+function initCmp() {
+  if (!cmpReady) {
+    const opts = sources.map(s => `<option value="${s.id}">${esc(srcName(s))}</option>`).join('');
+    $('#cmp-sa').innerHTML = opts; $('#cmp-sb').innerHTML = opts;
+    if (sources.length > 1) $('#cmp-sb').value = String(sources[1].id);
+    const f = q(`SELECT DISTINCT top p FROM files WHERE top <> '' UNION
+      SELECT DISTINCT top || '/' || substr(r, 1, instr(r, '/') - 1) FROM (SELECT top, substr(path, length(top) + 2) r FROM files WHERE top <> '') WHERE instr(r, '/') > 0
+      ORDER BY 1`);
+    $('#folders').innerHTML = f.map(x => `<option value="${esc(x.p)}">`).join('');
+    cmpReady = true;
+  }
+}
+$('#cmp-go').onclick = runCmp;
+function side(name, sid, prefix) {
+  const pre = prefix ? prefix.replace(/^\/+|\/+$/g, '') + '/' : '';
+  db.exec(`DROP TABLE IF EXISTS tmp_${name}`);
+  db.run(`CREATE TEMP TABLE tmp_${name} AS SELECT COALESCE(sha256, name || '|' || size) k, path, size, source_id sid FROM files WHERE source_id = ? AND substr(path,1,?) = ?`, [sid, pre.length, pre]);
+  db.run(`CREATE INDEX tmp_${name}_k ON tmp_${name}(k)`);
+  return pre;
+}
+function sub(rows, pre) { // group a list of files into immediate sub-folders
+  const m = new Map();
+  rows.forEach(r => { const rest = r.path.slice(pre.length), i = rest.indexOf('/'), key = i < 0 ? rest : rest.slice(0, i);
+    const e = m.get(key) || { name: key, dir: i >= 0, n: 0, size: 0, sid: r.sid }; e.n++; e.size += r.size; m.set(key, e); });
+  return [...m.values()].sort((x, y) => y.size - x.size);
+}
+function runCmp() {
+  if (!db || !cmpReady) return;
+  const sa = +$('#cmp-sa').value, sb = +$('#cmp-sb').value, ta = $('#cmp-a').value.trim(), tb = $('#cmp-b').value.trim();
+  const pa = side('a', sa, ta), pb = side('b', sb, tb);
+  const tot = t => q(`SELECT COUNT(*) n, COALESCE(SUM(size),0) s FROM tmp_${t}`)[0];
+  const A = tot('a'), B = tot('b');
+  if (!A.n || !B.n) { $('#cmp-out').innerHTML = `<p class="muted">Una delle due cartelle è vuota o non esiste (A: ${nf.format(A.n)} file, B: ${nf.format(B.n)} file).</p>`; return; }
+  const onlyA = q('SELECT path, size, sid FROM tmp_a WHERE k NOT IN (SELECT k FROM tmp_b)');
+  const onlyB = q('SELECT path, size, sid FROM tmp_b WHERE k NOT IN (SELECT k FROM tmp_a)');
+  const both = q('SELECT COUNT(*) n, COALESCE(SUM(size),0) s FROM tmp_a WHERE k IN (SELECT k FROM tmp_b)')[0];
+  const sumOf = r => r.reduce((s, x) => s + x.size, 0);
+  const fig = (t, n, s) => `<div>${t}<b>${nf.format(n)} file</b>${fmt(s)}</div>`;
+  const verdict = (name, only, total, other, sid, text) => only.length ? '' :
+    `<div class="verdict"><b>Tutti i ${nf.format(total.n)} file di ${name} (${fmt(total.s)}) esistono anche in ${other}.</b> ${name} è ridondante: eliminandola si liberano ${fmt(total.s)}. <span class="muted">Se contiene un catalogo Lightroom o simili, controlla prima che non punti a questo percorso.</span>
+     ${text ? '<div style="margin-top:.5rem">' + mkButtons(sid, text) + '</div>' : ''}</div>`;
+  const table = (title, only, pre, sid) => `<h3>${title}</h3>` + (only.length ? '<table><tr><th>Cartella o file</th><th class="num">File</th><th class="num">Dimensione</th><th>Segno</th></tr>' +
+    sub(only, pre).slice(0, 60).map(e => `<tr><td>${esc(e.name)}${e.dir ? '/' : ''}</td><td class="num">${nf.format(e.n)}</td><td class="num">${fmt(e.size)}</td><td>${mkButtons(e.sid, pre + e.name)}</td></tr>`).join('') + '</table>' : '<p class="muted">Niente.</p>');
+  $('#cmp-out').innerHTML =
+    `<div class="figures">${fig('Solo in A', onlyA.length, sumOf(onlyA))}${fig('In entrambe', both.n, both.s)}${fig('Solo in B', onlyB.length, sumOf(onlyB))}</div>
+     <p class="muted">A ha ${nf.format(A.n)} file (${fmt(A.s)}), B ne ha ${nf.format(B.n)} (${fmt(B.s)}).</p>` +
+    verdict('A', onlyA, A, 'B', sa, ta) + verdict('B', onlyB, B, 'A', sb, tb) +
+    table('Solo in A, non esistono in B', onlyA, pa, sa) + table('Solo in B, non esistono in A', onlyB, pb, sb);
+}
+
+/* ---------- marks, export ---------- */
+function markRows() {
+  return Object.entries(marks).map(([k, m]) => { const i = k.indexOf('|'), sid = +k.slice(0, i), p = k.slice(i + 1);
+    return { sid, path: p, mark: m, source: (sources.find(s => s.id === sid) || {}).label || sid }; });
+}
+function sizeOf(sid, p) {
+  return q('SELECT COALESCE(SUM(size),0) s, COUNT(*) n FROM files WHERE source_id = ? AND (path = ? OR substr(path,1,?) = ?)', [sid, p, p.length + 1, p + '/'])[0];
+}
+function renderMarks() {
+  const rows = markRows(); let del = 0;
+  const html = rows.map(r => { const z = sizeOf(r.sid, r.path); if (r.mark === 'delete') del += z.s;
+    return `<tr><td>${esc(r.source)}</td><td class="path">${esc(r.path)}</td><td class="num">${nf.format(z.n)}</td><td class="num">${fmt(z.s)}</td><td>${mkButtons(r.sid, r.path)}</td></tr>`; }).join('');
+  $('#marklist').innerHTML = rows.length ? '<tr><th>Disco</th><th>Percorso</th><th class="num">File</th><th class="num">Dimensione</th><th>Segno</th></tr>' + html : '';
+  $('#minfo').textContent = rows.length ? `${nf.format(rows.length)} segni. Da eliminare: ${fmt(del)}.` : 'Nessun segno. Usa "tieni", "elimina" e "vedi" accanto a file e cartelle per prendere appunti; non cambia nulla sul disco.';
+}
+function download(name, text) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = name; a.click(); }
+$('#exp-csv').onclick = () => download('sidecar-segni.csv', 'disco,percorso,segno\n' + markRows().map(r => [r.source, r.path, r.mark].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n'));
+$('#exp-sh').onclick = () => download('sidecar-da-eliminare.txt', '# Percorsi segnati "elimina", relativi alla radice del disco. Controlla prima di usarli.\n' + markRows().filter(r => r.mark === 'delete').map(r => r.source + '\t' + r.path).join('\n'));
+$('#clear-marks').onclick = async () => {
+  if (!confirm('Azzerare tutti i segni?')) return;
+  if (TOKEN && actions) {
+    try { await api('api/marks', { items: markRows().map(r => ({ source: r.source, path: r.path, mark: null })) }); }
+    catch (e) { return alert('Segni non azzerati:\n\n' + e.message); }
+  }
+  marks = {}; try { localStorage.removeItem('sidecar-marks'); } catch (e) {}
+  renderMarks(); $('#nmarks').textContent = '';
+};
+
+/* ---------- quarantine ---------- */
+$('#do-quar').onclick = async () => {
+  const del = markRows().filter(r => r.mark === 'delete');
+  if (!del.length) return toast('Nessun elemento segnato "elimina".');
+  const size = del.reduce((s, r) => s + sizeOf(r.sid, r.path).s, 0);
+  if (!confirm(`Spostare in quarantena ${del.length} element${del.length === 1 ? 'o' : 'i'} (${fmt(size)})?\n\nNon vengono cancellati: potrai ripristinarli dalla scheda Quarantena.`)) return;
+  try {
+    const res = await runJob('api/quarantine', { items: del.map(r => ({ source: r.source, path: r.path })) }, 'Sposto in quarantena');
+    toast(`Spostati ${nf.format(res.files)} file (${fmt(res.bytes)}) in quarantena.`);
+    await reloadDb('quar');
+  } catch (e) { alert('Non spostato:\n\n' + e.message); }
+};
+function renderQuar() {
+  if (!actions) { $('#qinfo').textContent = 'La quarantena funziona solo se avvii Sidecar con open-sidecar.'; return; }
+  const items = quarState.quarantine, tot = items.reduce((s, m) => s + m.size, 0);
+  $('#qinfo').textContent = items.length ? `${nf.format(items.length)} elementi in attesa, ${fmt(tot)}.` : 'La quarantena è vuota.';
+  $('#q-empty').classList.toggle('hide', !items.length);
+  $('#quarlist').innerHTML = items.length ? '<tr><th>Spostato</th><th>Disco</th><th>Percorso originale</th><th class="num">File</th><th class="num">Dimensione</th><th></th></tr>' +
+    items.map(m => `<tr><td>${new Date(m.moved_at * 1000).toLocaleString('it', { dateStyle: 'short', timeStyle: 'short' })}</td><td>${esc(m.source)}</td><td class="path">${esc(m.path)}${m.is_dir ? '/' : ''}</td><td class="num">${nf.format(m.files)}</td><td class="num">${fmt(m.size)}</td><td><button class="btn quiet" data-restore="${m.id}">Ripristina</button></td></tr>`).join('') : '';
+  $('#quarlist').querySelectorAll('[data-restore]').forEach(b => b.onclick = async () => {
+    try { const r = await api('api/restore', { id: b.dataset.restore }); toast('Ripristinato: ' + r.restored + '. ' + r.note); await reloadDb('quar'); }
+    catch (e) { alert('Non ripristinato:\n\n' + e.message); }
+  });
+}
+$('#q-empty').onclick = async () => {
+  const tot = quarState.quarantine.reduce((s, m) => s + m.size, 0);
+  const t = prompt(`Questo cancella definitivamente ${quarState.quarantine.length} elementi (${fmt(tot)}) e non si può annullare.\n\nScrivi ELIMINA per confermare:`);
+  if (t !== 'ELIMINA') return;
+  try { const r = await runJob('api/empty', { confirm: t }, 'Elimino definitivamente'); toast(`Eliminati definitivamente ${nf.format(r.deleted)} elementi (${fmt(r.bytes)}).`); await reloadDb('quar'); }
+  catch (e) { alert('Non eliminato:\n\n' + e.message); }
+};
+
+/* mark buttons, everywhere */
+document.addEventListener('click', e => {
+  const b = e.target.closest('.mk button'); if (!b) return;
+  setMark(+b.dataset.sid, b.dataset.p, b.dataset.m);
+  rerenderCurrent(); renderRail();
+});
+window.addEventListener('resize', () => { if (db && !$('#tab-map').classList.contains('hide')) renderMap(); });
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# Disk Sidecar never commits data from a real disk
+*.db
+*.db.bak
+*.db-journal
+index.db*
+log.csv
+_quarantena/
+peers/
+out/
+__pycache__/
+*.pyc
+.DS_Store
+._*
