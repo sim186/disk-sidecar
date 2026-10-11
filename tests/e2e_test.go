@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -365,7 +366,7 @@ func newServer(t *testing.T) *srv {
 	write(t, s.A+"/doc/edit.txt", "version two!")
 
 	s.port = freePort(t)
-	cmd := exec.Command(s.A+"/.sidecar/"+discBin(), "serve", "--port", fmt.Sprint(s.port), "--no-open", "--no-default-mounts", "--mounts", s.vol)
+	cmd := exec.Command(s.A+"/.sidecar/"+discBin(), "serve", "--port", fmt.Sprint(s.port), "--no-open", "--no-update-check", "--no-default-mounts", "--mounts", s.vol)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -636,3 +637,71 @@ func TestServerRefusesChangedFiles(t *testing.T) {
 }
 
 var _ = sql.ErrNoRows
+
+// A fake GitHub says a newer release exists; a plain folder is offered as a disk to install on.
+func TestServerUpdateNoticeAndInstallOnADisk(t *testing.T) {
+	tmp := tempDir(t)
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"tag_name":"v99.0.0","html_url":"https://example.test/release"}`)
+	}))
+	defer gh.Close()
+	vol := filepath.Join(tmp, "Volumes")
+	write(t, vol+"/Plain/a.txt", "hello")
+	write(t, vol+"/Done/b.txt", "x")
+	mustRun(t, "install", vol+"/Done", "--yes", "--label", "Done")
+	port := freePort(t)
+	cmd := exec.Command(vol+"/Done/.sidecar/"+discBin(), "serve", "--port", fmt.Sprint(port), "--no-open", "--no-default-mounts", "--mounts", vol)
+	cmd.Env = append(os.Environ(), "HOME="+tmp, "XDG_CONFIG_HOME="+tmp, "APPDATA="+tmp, "SIDECAR_UPDATE_URL="+gh.URL)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
+	s := &srv{t: t, port: port, base: fmt.Sprintf("http://127.0.0.1:%d", port)}
+	var html string
+	for i := 0; i < 100 && html == ""; i++ {
+		if r, err := http.Get(s.base + "/catalog.html"); err == nil {
+			b, _ := io.ReadAll(r.Body)
+			r.Body.Close()
+			html = string(b)
+		} else {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	s.token = regexp.MustCompile(`sidecar-token" content="([^"]+)`).FindStringSubmatch(html)[1]
+
+	var upd map[string]any
+	for i := 0; i < 50 && upd == nil; i++ {
+		_, r := s.call("/api/newdisks")
+		upd, _ = r["update"].(map[string]any)
+		time.Sleep(100 * time.Millisecond)
+	}
+	if upd == nil || upd["version"] != "99.0.0" || upd["url"] != "https://example.test/release" {
+		t.Fatalf("update notice: %v", upd)
+	}
+	s.call("/api/update/skip", map[string]string{"version": "99.0.0"})
+	if _, r := s.call("/api/newdisks"); r["update"] != nil {
+		t.Fatalf("skipped version still offered: %v", r["update"])
+	}
+
+	_, r := s.call("/api/disks")
+	have := map[string]bool{}
+	for _, d := range r["disks"].([]any) {
+		m := d.(map[string]any)
+		have[m["name"].(string)] = m["has_sidecar"].(bool)
+	}
+	if done, ok := have["Done"]; !ok || !done {
+		t.Fatalf("disks: %v", have)
+	}
+	if plain, ok := have["Plain"]; !ok || plain {
+		t.Fatalf("disks: %v", have)
+	}
+	if st, _, msg := s.job("/api/disk/setup", map[string]string{"path": "/etc"}); st != "rejected" || !strings.Contains(msg, "not connected") {
+		t.Fatalf("setup of a folder that is not a mounted disk: %s %s", st, msg)
+	}
+	if st, _, msg := s.job("/api/disk/setup", map[string]string{"path": vol + "/Plain"}); st != "done" {
+		t.Fatalf("setup: %s %s", st, msg)
+	}
+	if count(t, vol+"/Plain/.sidecar/index.db", "select count(*) from files") != 1 || !exists(vol+"/Plain/Open Sidecar.command") {
+		t.Fatal("the disk was not installed and scanned")
+	}
+}

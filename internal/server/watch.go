@@ -75,10 +75,46 @@ func systemMount(p string) bool {
 	return false
 }
 
+// Volume is a disk that is plugged in now, with or without a sidecar.
+type Volume struct {
+	Path       string `json:"path"`
+	Name       string `json:"name"`
+	HasSidecar bool   `json:"has_sidecar"`
+}
+
+// diskName is the name to show for a mount: the folder name, or the drive letter on Windows.
+func diskName(p string) string {
+	if runtime.GOOS == "windows" {
+		if v := filepath.VolumeName(p); v != "" && strings.TrimRight(p, `\/`) == v {
+			return v
+		}
+	}
+	return filepath.Base(p)
+}
+
+// volumes lists the disks plugged in, without the system disk and hidden folders.
+func (s *Server) volumes() []Volume {
+	have := map[string]bool{}
+	for _, d := range s.discover() {
+		have[realpath(d.Root)] = true
+	}
+	out := []Volume{}
+	seen := map[string]bool{}
+	for _, p := range s.mountCandidates() {
+		if seen[p] || strings.HasPrefix(filepath.Base(p), ".") || !dirExists(p) || systemMount(p) {
+			continue
+		}
+		seen[p] = true
+		out = append(out, Volume{Path: p, Name: diskName(p), HasSidecar: have[realpath(p)]})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
 func (s *Server) watchOnce(w *watcher, first bool) {
 	have := map[string]bool{}
 	for _, d := range s.discover() {
-		have[d.Root] = true
+		have[realpath(d.Root)] = true
 	}
 	now := map[string]bool{}
 	for _, p := range s.mountCandidates() {
@@ -92,10 +128,10 @@ func (s *Server) watchOnce(w *watcher, first bool) {
 	for p := range now {
 		isNew := !w.known[p]
 		w.known[p] = true
-		if first || !isNew || have[p] || w.ignored[p] {
+		if first || !isNew || have[realpath(p)] || w.ignored[p] {
 			continue
 		}
-		w.pending[p] = NewDisk{Path: p, Name: filepath.Base(p)}
+		w.pending[p] = NewDisk{Path: p, Name: diskName(p)}
 	}
 	for p := range w.known { // unplugged: forget it, so a later plug-in asks again
 		if !now[p] {
@@ -104,7 +140,7 @@ func (s *Server) watchOnce(w *watcher, first bool) {
 		}
 	}
 	for p := range w.pending { // got a sidecar in the meantime (made by hand, or by another copy)
-		if have[p] {
+		if have[realpath(p)] {
 			delete(w.pending, p)
 		}
 	}
@@ -128,14 +164,6 @@ func (w *watcher) list() []NewDisk {
 	return out
 }
 
-// take returns the pending disk at path; only disks we proposed can be set up from the page.
-func (w *watcher) take(path string) (NewDisk, bool) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	d, ok := w.pending[path]
-	return d, ok
-}
-
 // dismiss hides the proposal; forever=true also remembers it across runs.
 func (w *watcher) dismiss(path string, forever bool) {
 	w.mu.Lock()
@@ -148,7 +176,7 @@ func (w *watcher) dismiss(path string, forever bool) {
 }
 
 // doSetup installs the sidecar on a proposed disk and scans it.
-func (s *Server) doSetup(d NewDisk, job *Job) (any, error) {
+func (s *Server) doSetup(d Volume, job *Job) (any, error) {
 	job.Phase("Installing on " + d.Name + "…")
 	err := install.Run(install.Options{Disk: d.Path, Yes: true, Scan: true, Out: io.Discard, Err: io.Discard,
 		Progress: func(n int) { job.Update("Scanning "+d.Name+"…", int64(n), -1) }})

@@ -26,7 +26,11 @@ finds the files that exist twice. It runs on your own computer; nothing is sent 
 1. Download the build for your system from the
    [releases page](https://github.com/sim186/disk-sidecar/releases). To use the same disk on
    several kinds of computer, download `disk-sidecar-…-all-systems.zip` and unzip it.
-2. Put Sidecar on a disk (this also offers to scan it):
+2. **Double click the program you downloaded.** Your browser opens and asks where to install Disk
+   Sidecar: choose a connected disk and press Install. It copies itself there and scans the disk. No
+   terminal needed. (Already installed disks are offered too, as Update.)
+
+   If you prefer the terminal, the same thing from the command line (this also offers to scan):
 
    ```sh
    ./sidecar-darwin-arm64 install /Volumes/MyDisk        # Mac, Apple silicon
@@ -39,9 +43,15 @@ finds the files that exist twice. It runs on your own computer; nothing is sent 
    leaves your index, marks, quarantine and snapshots alone. `--dry-run` shows what it would do,
    `--label "Name"` names the disk, `--scan` scans without asking, `--from DIR` adds builds from
    another folder.
-3. To open the catalog, double click `.sidecar/open-sidecar.command` (Mac and Linux; if macOS blocks
-   it, right click and choose Open) or `.sidecar/open-sidecar.bat` (Windows). Your browser opens a
+3. To open the catalog later, double click **Open Sidecar** in the root of the disk
+   (`Open Sidecar.command` on Mac and Linux, `Open Sidecar.bat` on Windows; if macOS blocks it, right
+   click and choose Open). The hidden `.sidecar` folder has the same launchers. Your browser opens a
    page served from your own computer, `http://127.0.0.1:8765`.
+
+**Updates.** The app asks GitHub, at most once a day, whether a newer release exists, and shows a line with
+a link if so. It sends nothing about you or your disks, and never installs by itself. Turn it off with
+`sidecar serve --no-update-check` or `SIDECAR_NO_UPDATE_CHECK=1`. A disk plugged in while the app runs is
+offered a sidecar too (`--no-watch` turns that off).
 
 The builds are not code-signed, so macOS (Gatekeeper) and Windows (SmartScreen) may warn the first
 time. On a Mac, if a downloaded file is refused, run `xattr -d com.apple.quarantine <file>`.

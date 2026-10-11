@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="sidecar-token" content="">
 <title>Sidecar</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231a2130'/><circle cx='13.5' cy='16' r='9.5' fill='%23e8ebef'/><circle cx='13.5' cy='16' r='3.2' fill='%231a2130'/><rect x='21' y='16.5' width='8' height='9' rx='2.2' fill='%235ec4a0'/></svg>">
 <style>
 @font-face { font-family: "Atkinson Hyperlegible"; font-weight: 400; font-display: swap; src: url("vendor/fonts/atkinson-400.woff2") format("woff2"); }
 @font-face { font-family: "Atkinson Hyperlegible"; font-weight: 700; font-display: swap; src: url("vendor/fonts/atkinson-700.woff2") format("woff2"); }
@@ -133,6 +134,13 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
 #busy .bar { height: 6px; background: var(--rule); }
 #busy .bar i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .3s; }
 #busy .txt { margin-top: .6rem; overflow-wrap: anywhere; }
+#adddisk { position: fixed; inset: 0; background: color-mix(in srgb, var(--ground) 82%, transparent); display: flex; align-items: center; justify-content: center; z-index: 52; }
+#adddisk .panel { background: var(--paper); border: 2px solid var(--ink); padding: 1.4rem 1.6rem; width: min(34rem, 92vw); max-height: 85vh; overflow: auto; }
+#adddisk h3 { margin: 0 0 .4rem; }
+#adddisk ul { list-style: none; margin: .9rem 0; padding: 0; }
+#adddisk li { display: flex; align-items: center; gap: 1rem; justify-content: space-between; padding: .55rem 0; border-top: 1px solid var(--rule); }
+#adddisk li small { display: block; color: var(--muted); overflow-wrap: anywhere; }
+#upd { display: block; margin: .3rem .4rem 0; font-size: .85rem; }
 #newdisk { position: fixed; right: 1.2rem; top: 1.2rem; background: var(--paper); border: 1px solid var(--ink); padding: .8rem 1rem; max-width: min(26rem, 90vw); z-index: 55; }
 #newdisk p { margin: 0 0 .6rem; }
 #newdisk .row { display: flex; gap: .8rem; flex-wrap: wrap; align-items: center; }
@@ -159,6 +167,7 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
 <div id="app" class="hide">
   <aside id="rail">
     <div class="brand"><span class="word">sidecar</span><span class="ver" id="ver"></span></div>
+    <div id="upd" class="hide"><a id="upd-link" target="_blank" rel="noopener"></a> · <button class="btn quiet" id="upd-skip" style="font-size:inherit">skip</button></div>
     <nav id="nav">
       <button data-tab="map" class="on">Map</button>
       <button data-tab="search">Search</button>
@@ -174,6 +183,7 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
     <div class="foot">
       <div id="vstatus"></div>
       <button class="btn hide" id="verify-now">Check now</button>
+      <button class="btn quiet hide" id="add-disk">Install on a disk…</button>
     </div>
   </aside>
 
@@ -245,6 +255,12 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
     <div class="bar"><i id="busy-bar"></i></div>
     <div class="txt" id="busy-text"></div>
     <div class="muted" style="margin-top:.5rem;font-size:.85rem">Keep this page open until it finishes.</div>
+  </div></div>
+  <div id="adddisk" class="hide"><div class="panel" role="dialog" aria-labelledby="adddisk-t">
+    <h3 id="adddisk-t">Where should Disk Sidecar be installed?</h3>
+    <div class="muted" id="adddisk-sub">Choose a disk. Sidecar copies itself there and lists its files, so the catalog travels with the disk. Nothing you have on it is changed.</div>
+    <ul id="adddisk-list"></ul>
+    <button class="btn quiet" id="adddisk-close">Not now</button>
   </div></div>
   <div id="newdisk" class="hide" role="alertdialog" aria-labelledby="newdisk-t">
     <p id="newdisk-t"></p>
@@ -356,6 +372,7 @@ async function refreshActions() {
   if (TOKEN) { try { quarState = await api('api/state'); actions = true; } catch (e) {} }
   $('#navquar').classList.toggle('hide', !actions);
   $('#verify-now').classList.toggle('hide', !actions);
+  $('#add-disk').classList.toggle('hide', !actions);
   $('#do-quar').classList.toggle('hide', !actions);
   if (actions) {
     $('#nquar').textContent = quarState.quarantine.length || '';
@@ -406,6 +423,7 @@ async function boot() {
     open(new Uint8Array(await r.arrayBuffer()));
   } catch (e) {
     $('#dropmsg').textContent = 'Open the index.db file to begin.';
+    if (TOKEN) { $('#dropmsg').textContent = 'No disk has Disk Sidecar yet.'; showAddDisk(true); }
   }
 }
 function open(bytes, fromReload) {
@@ -727,10 +745,44 @@ function showOffer(d) {
   $('#newdisk-t').textContent = `New disk "${d.name}" connected. Build its sidecar (install and scan)?`;
   $('#newdisk').classList.remove('hide');
 }
+let offeredUpdate = null;
+function showUpdate(u) {
+  offeredUpdate = u;
+  $('#upd').classList.toggle('hide', !u);
+  if (u) { $('#upd-link').textContent = 'Version ' + u.version + ' is available'; $('#upd-link').href = u.url; }
+}
+$('#upd-skip').onclick = async () => { const u = offeredUpdate; showUpdate(null); try { await api('api/update/skip', { version: u.version }); } catch (e) {} };
+
+/* ---------- install on a disk ---------- */
+async function showAddDisk(first) {
+  let disks = [];
+  try { disks = (await api('api/disks')).disks; } catch (e) { toast(e.message); return; }
+  $('#adddisk-t').textContent = first ? 'Where should Disk Sidecar be installed?' : 'Install on a disk';
+  $('#adddisk-list').innerHTML = disks.length ? disks.map((d, i) =>
+    `<li><span><b>${esc(d.name)}</b><small>${esc(d.path)}</small></span><button class="btn" data-i="${i}">${d.has_sidecar ? 'Update' : 'Install'}</button></li>`).join('')
+    : '<li><span class="muted">No external disk found. Plug one in: it will show up here by itself.</span></li>';
+  $('#adddisk').classList.remove('hide');
+  $('#adddisk').dataset.disks = JSON.stringify(disks);
+}
+$('#add-disk').onclick = () => showAddDisk(false);
+$('#adddisk-close').onclick = () => $('#adddisk').classList.add('hide');
+$('#adddisk-list').onclick = async e => {
+  const b = e.target.closest('button[data-i]'); if (!b) return;
+  const d = JSON.parse($('#adddisk').dataset.disks)[+b.dataset.i];
+  $('#adddisk').classList.add('hide'); setupBusy = true;
+  try {
+    await runJob('api/disk/setup', { path: d.path }, (d.has_sidecar ? 'Updating ' : 'Building the sidecar of ') + d.name);
+    toast(`Sidecar ready on ${d.name}. Next time, open "Open Sidecar" on that disk.`);
+    await reloadDb('map');
+  } catch (err) { toast('Setup failed: ' + err.message); }
+  finally { setupBusy = false; }
+};
+
 async function pollNewDisks() {
   if (!TOKEN || setupBusy) return;
   try {
-    const { disks } = await api('api/newdisks');
+    const { disks, update } = await api('api/newdisks');
+    if (JSON.stringify(update) !== JSON.stringify(offeredUpdate)) showUpdate(update);
     if (!disks.length) { offered = null; $('#newdisk').classList.add('hide'); return; }
     if (!offered || !disks.some(x => x.path === offered.path)) showOffer(disks[0]);
   } catch (e) {}

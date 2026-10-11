@@ -4,6 +4,19 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
+## 0.5.0
+
+- Double clicking the program (no command) opens the app. If no disk has a sidecar yet it asks where to
+  install it, with a list of the connected disks; "Install on a disk…" in the side bar does the same later.
+  The terminal is no longer needed to install.
+- The app tells you when a newer release exists (a line under the name, with a link and "skip"). It asks
+  GitHub at most once a day and sends only the request itself: no disk, file or user information. Nothing is
+  downloaded or installed by itself. Turn it off with `sidecar serve --no-update-check` or the environment
+  variable `SIDECAR_NO_UPDATE_CHECK=1`.
+- The page has a favicon.
+- Fix: a disk reached through a symbolic link (for example `/tmp` on a Mac) was offered as new even when it
+  already had a sidecar.
+
 ## 0.4.1
 
 - Fix: the `Open Sidecar` launchers that 0.4.0 puts in the root of the disk were indexed as if they were

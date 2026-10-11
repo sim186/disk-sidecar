@@ -20,7 +20,7 @@ import (
 const usage = `Sidecar %s: a catalog that lives on each of your external disks.
 
   sidecar install <disk>      put Sidecar on a disk (or update it), and scan it
-  sidecar serve               open the catalog in your browser
+  sidecar serve               open the catalog in your browser (what a double click does)
   sidecar scan <folder>       index a folder or disk (incremental)
   sidecar hash                confirm duplicates with SHA-256
   sidecar merge <main> <other>  import another index
@@ -74,9 +74,8 @@ func die(err error) {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Printf(usage, assets.Version)
-		return
+	if len(os.Args) < 2 { // double click: open the app (it also offers to install on a disk)
+		os.Args = append(os.Args, "serve")
 	}
 	cmd, args := os.Args[1], os.Args[2:]
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
@@ -167,6 +166,7 @@ func main() {
 		fs.Var(&mounts, "mounts", "extra folder that contains mounted disks (repeatable)")
 		fs.BoolVar(&cfg.NoOpen, "no-open", false, "do not open the browser")
 		fs.BoolVar(&cfg.NoVerify, "no-verify", false, "do not re-check the disks at start")
+		fs.BoolVar(&cfg.NoUpdateCheck, "no-update-check", false, "do not ask GitHub whether a newer release exists (or set SIDECAR_NO_UPDATE_CHECK=1)")
 		fs.BoolVar(&cfg.NoWatch, "no-watch", false, "do not offer to set up disks plugged in while running")
 		fs.BoolVar(&cfg.NoDefaultMounts, "no-default-mounts", false, "do not look in /Volumes, /media, /mnt (testing)")
 		parse(fs, args)
