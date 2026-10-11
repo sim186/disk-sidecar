@@ -4,6 +4,12 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
+## 0.3.0
+
+- New disks are noticed while the app runs: when a disk without a sidecar is plugged in, the page offers
+  to build one (install and scan). "Not now" asks again next time; "Never for this disk" is remembered.
+  `sidecar serve --no-watch` turns it off.
+
 ## 0.2.1
 
 - The interface and every message are in English. The quarantine folder is `_quarantine` and the word
