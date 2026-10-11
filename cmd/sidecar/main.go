@@ -167,6 +167,7 @@ func main() {
 		fs.Var(&mounts, "mounts", "extra folder that contains mounted disks (repeatable)")
 		fs.BoolVar(&cfg.NoOpen, "no-open", false, "do not open the browser")
 		fs.BoolVar(&cfg.NoVerify, "no-verify", false, "do not re-check the disks at start")
+		fs.BoolVar(&cfg.NoWatch, "no-watch", false, "do not offer to set up disks plugged in while running")
 		fs.BoolVar(&cfg.NoDefaultMounts, "no-default-mounts", false, "do not look in /Volumes, /media, /mnt (testing)")
 		parse(fs, args)
 		cfg.Mounts = mounts

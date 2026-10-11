@@ -24,7 +24,8 @@ type Options struct {
 	Disk, Label       string
 	Scan, NoScan, Yes bool
 	DryRun            bool
-	From              []string // folders with the program built for other systems
+	From              []string       // folders with the program built for other systems
+	Progress          func(seen int) // called while scanning
 	Out, Err          io.Writer
 	In                *os.File
 }
@@ -290,7 +291,7 @@ func Run(o Options) error {
 	if statErr != nil && !o.NoScan && (o.Scan || o.Yes || ask(o, fmt.Sprintf("Scan the disk now as '%s'? (about a minute per 100,000 files)", label), true)) {
 		fmt.Fprintln(o.Out, "Scanning...")
 		host, _ := os.Hostname()
-		st, err := scan.Run(scan.Options{Root: disk, DB: index, Label: label, Host: host, HashMin: -1, Text: true, Log: o.Err})
+		st, err := scan.Run(scan.Options{Root: disk, DB: index, Label: label, Host: host, HashMin: -1, Text: true, Progress: o.Progress, Log: o.Err})
 		if err != nil {
 			return fmt.Errorf("the scan failed: %w", err)
 		}

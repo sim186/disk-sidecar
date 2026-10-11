@@ -133,6 +133,9 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
 #busy .bar { height: 6px; background: var(--rule); }
 #busy .bar i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .3s; }
 #busy .txt { margin-top: .6rem; overflow-wrap: anywhere; }
+#newdisk { position: fixed; right: 1.2rem; top: 1.2rem; background: var(--paper); border: 1px solid var(--ink); padding: .8rem 1rem; max-width: min(26rem, 90vw); z-index: 55; }
+#newdisk p { margin: 0 0 .6rem; }
+#newdisk .row { display: flex; gap: .8rem; flex-wrap: wrap; align-items: center; }
 #toast { position: fixed; left: 1.2rem; bottom: 1.2rem; background: var(--ink); color: var(--ground); padding: .65rem 1rem; border-radius: 2px; max-width: min(36rem, 90vw); z-index: 60; }
 
 @media (max-width: 880px) {
@@ -243,6 +246,14 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
     <div class="txt" id="busy-text"></div>
     <div class="muted" style="margin-top:.5rem;font-size:.85rem">Keep this page open until it finishes.</div>
   </div></div>
+  <div id="newdisk" class="hide" role="alertdialog" aria-labelledby="newdisk-t">
+    <p id="newdisk-t"></p>
+    <div class="row">
+      <button class="btn" id="newdisk-go">Create sidecar</button>
+      <button class="btn quiet" id="newdisk-later">Not now</button>
+      <button class="btn quiet" id="newdisk-never">Never for this disk</button>
+    </div>
+  </div>
   <div id="toast" class="hide" role="status"></div>
 </div>
 
@@ -701,6 +712,38 @@ document.addEventListener('click', e => {
   rerenderCurrent(); renderRail();
 });
 window.addEventListener('resize', () => { if (db && !$('#tab-map').classList.contains('hide')) renderMap(); });
+
+/* ---------- a disk was plugged in ---------- */
+let offered = null, setupBusy = false;
+function showOffer(d) {
+  offered = d;
+  $('#newdisk-t').textContent = `New disk "${d.name}" connected. Build its sidecar (install and scan)?`;
+  $('#newdisk').classList.remove('hide');
+}
+async function pollNewDisks() {
+  if (!TOKEN || setupBusy) return;
+  try {
+    const { disks } = await api('api/newdisks');
+    if (!disks.length) { offered = null; $('#newdisk').classList.add('hide'); return; }
+    if (!offered || !disks.some(x => x.path === offered.path)) showOffer(disks[0]);
+  } catch (e) {}
+}
+async function dismissOffer(forever) {
+  const d = offered; offered = null; $('#newdisk').classList.add('hide');
+  try { await api('api/disk/ignore', { path: d.path, forever }); } catch (e) {}
+}
+$('#newdisk-later').onclick = () => dismissOffer(false);
+$('#newdisk-never').onclick = () => dismissOffer(true);
+$('#newdisk-go').onclick = async () => {
+  const d = offered; setupBusy = true; $('#newdisk').classList.add('hide');
+  try {
+    await runJob('api/disk/setup', { path: d.path }, 'Building the sidecar of ' + d.name);
+    toast(`Sidecar ready on ${d.name}.`);
+    await reloadDb('map');
+  } catch (e) { toast('Setup failed: ' + e.message); }
+  finally { setupBusy = false; offered = null; }
+};
+setInterval(pollNewDisks, 2500);
 boot();
 </script>
 </body>

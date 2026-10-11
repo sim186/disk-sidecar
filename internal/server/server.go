@@ -32,6 +32,7 @@ type Config struct {
 	NoDefaultMounts bool
 	NoOpen          bool
 	NoVerify        bool
+	NoWatch         bool // do not offer to set up disks plugged in while running
 }
 
 // Server holds the state of a running server.
@@ -47,11 +48,12 @@ type Server struct {
 	cacheSig   string
 	cachePath  string
 	tmp        string
+	watch      *watcher
 }
 
 // Run starts the server and blocks until interrupted.
 func Run(cfg Config, out io.Writer) error {
-	s := &Server{cfg: cfg, token: newToken(24), jt: jobTable{jobs: map[string]*Job{}}}
+	s := &Server{cfg: cfg, token: newToken(24), jt: jobTable{jobs: map[string]*Job{}}, watch: newWatcher()}
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", cfg.Port))
 	if err != nil {
 		return fmt.Errorf("cannot listen on port %d: %w (is Sidecar already running?)", cfg.Port, err)
@@ -76,6 +78,9 @@ func Run(cfg Config, out io.Writer) error {
 		if j, err := s.startJob(s.doVerify2); err == nil {
 			s.startupJob = j.id
 		}
+	}
+	if !cfg.NoWatch {
+		go s.watchDisks()
 	}
 	if !cfg.NoOpen {
 		time.AfterFunc(800*time.Millisecond, func() { openBrowser(url) })
@@ -179,6 +184,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, 200, map[string]any{"rows": s.searchText(r.URL.Query())})
+	case p == "/api/newdisks":
+		if !s.authorised(r) {
+			writeJSON(w, 403, map[string]string{"error": "missing token"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"disks": s.watch.list()})
 	case p == "/api/state":
 		if !s.authorised(r) {
 			writeJSON(w, 403, map[string]string{"error": "missing token"})
@@ -288,6 +299,26 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 		startJob(func(j *Job) (any, error) { return s.doEmpty(d.Confirm, j) })
 	case "/api/verify":
 		startJob(s.doVerify)
+	case "/api/disk/setup", "/api/disk/ignore":
+		var d struct {
+			Path    string `json:"path"`
+			Forever bool   `json:"forever"`
+		}
+		if err := json.Unmarshal(body, &d); err != nil {
+			bad(err)
+			return
+		}
+		nd, ok := s.watch.take(d.Path)
+		if !ok {
+			fail(w, refuse("that disk is not waiting for a sidecar (unplugged?)"))
+			return
+		}
+		if p == "/api/disk/ignore" {
+			s.watch.dismiss(d.Path, d.Forever)
+			writeJSON(w, 200, map[string]bool{"ok": true})
+			return
+		}
+		startJob(func(j *Job) (any, error) { return s.doSetup(nd, j) })
 	default:
 		writeJSON(w, 404, map[string]string{"error": "unknown action"})
 	}
