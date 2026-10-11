@@ -109,7 +109,8 @@ func KindOf(ext string) string {
 // Folders and files that are never indexed.
 var SkipDirs = map[string]bool{"$RECYCLE.BIN": true, "System Volume Information": true, ".Spotlight-V100": true,
 	".Trashes": true, ".fseventsd": true, ".TemporaryItems": true, ".sidecar": true}
-var SkipFiles = map[string]bool{".DS_Store": true, "Thumbs.db": true, "desktop.ini": true}
+var SkipFiles = map[string]bool{".DS_Store": true, "Thumbs.db": true, "desktop.ini": true,
+	"Open Sidecar.command": true, "Open Sidecar.bat": true} // the launchers the installer puts in the root
 
 // Skip reports whether a file name is never indexed (system noise and macOS ._ files).
 func SkipFile(name string) bool { return SkipFiles[name] || strings.HasPrefix(name, "._") }

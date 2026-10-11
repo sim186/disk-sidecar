@@ -4,6 +4,12 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
+## 0.4.1
+
+- Fix: the `Open Sidecar` launchers that 0.4.0 puts in the root of the disk were indexed as if they were
+  your files. They are now skipped by the scan. Disks scanned with 0.4.0 lose them from the catalog the
+  next time the app checks the disk.
+
 ## 0.4.0
 
 - Every file and folder has a "show" button that reveals it in Finder, Explorer or the file manager.
