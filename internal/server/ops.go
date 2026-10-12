@@ -740,7 +740,7 @@ func rmTree(path string, job *Job) error {
 }
 
 func (s *Server) doEmpty(confirm string, job *Job) (any, error) {
-	if confirm != "DELETE" {
+	if !letGo(confirm) {
 		return nil, refuse("confirmation missing")
 	}
 	srcs, disks := s.listSources()

@@ -624,7 +624,7 @@ func TestServerQuarantineRestoreEmpty(t *testing.T) {
 	if !exists(s.B+"/backup/onlyB.bin") || count(t, ib, "select count(*) from files") != 1 {
 		t.Fatal("restore incomplete")
 	}
-	if st, _, msg := s.job("/api/empty", map[string]any{"confirm": "DELETE"}); st != "done" {
+	if st, _, msg := s.job("/api/empty", map[string]any{"confirm": "Let it go"}); st != "done" {
 		t.Fatalf("empty: %s %s", st, msg)
 	}
 	if exists(s.B+"/.sidecar/_quarantine") || !exists(s.A+"/foto/shared.bin") {

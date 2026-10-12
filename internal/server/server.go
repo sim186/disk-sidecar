@@ -315,7 +315,7 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 			Confirm string `json:"confirm"`
 		}
 		json.Unmarshal(body, &d)
-		if d.Confirm != "DELETE" {
+		if !letGo(d.Confirm) {
 			fail(w, refuse("confirmation missing"))
 			return
 		}

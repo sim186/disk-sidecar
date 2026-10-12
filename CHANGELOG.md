@@ -6,6 +6,8 @@ which only changes when older programs could no longer read or write it safely.
 
 ## 0.7.0
 
+- The word that confirms releasing the farewell box for good is now `let it go` (was `DELETE`), in the app and in
+  the `/api/empty` call. Case and surrounding spaces do not matter.
 - Phones. **Add a phone…** in the side bar (or `sidecar phone`, `sidecar phone scan <serial>`) catalogues a
   phone so it appears next to your disks: map, duplicates, compare, search and the tidying piles' view all work on it.
   A phone cannot carry a sidecar, so its catalog is kept on this computer in `~/.sidecar/phones`, and the phone is

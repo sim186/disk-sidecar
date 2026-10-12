@@ -745,8 +745,8 @@ function renderQuar() {
 }
 $('#q-empty').onclick = async () => {
   const tot = quarState.quarantine.reduce((s, m) => s + m.size, 0);
-  const t = prompt(`Release ${quarState.quarantine.length} items (${fmt(tot)}) for good? They are gone forever and cannot be brought back.\n\nType DELETE to confirm:`);
-  if (t !== 'DELETE') return;
+  const t = prompt(`Release ${quarState.quarantine.length} items (${fmt(tot)}) for good? Thank them once more: once released they are gone forever and cannot be brought back.\n\nType "let it go" when you are ready:`);
+  if (!t || t.trim().toLowerCase() !== 'let it go') return;
   try { const r = await runJob('api/empty', { confirm: t }, 'Releasing with gratitude'); toast(`Released with gratitude: ${nf.format(r.deleted)} items (${fmt(r.bytes)}). Space freed.`); await reloadDb('quar'); }
   catch (e) { alert('Not released:\n\n' + e.message); }
 };

@@ -14,8 +14,11 @@ import (
 	"github.com/sim186/disk-sidecar/internal/scan"
 )
 
-// letGoWords is what the user types to release files from a phone, in the spirit of Marie Kondo.
+// letGoWords is what the user types to release files for good (from the farewell box or a phone), in the spirit of Marie Kondo.
 const letGoWords = "let it go"
+
+// letGo reports whether typed is the confirmation, ignoring case and surrounding spaces.
+func letGo(typed string) bool { return strings.ToLower(strings.TrimSpace(typed)) == letGoWords }
 
 // An Android phone is copied from and, once its files are proven safe on a disk, released. The
 // phone has no farewell box, so the only protection is proof: a file is removed from the phone
@@ -355,7 +358,7 @@ func backupOf(disks []*Src, dbs map[string]*sql.DB, size int64, sum string) stri
 // doPhoneRelease deletes files from an Android phone. Dry only reports. A file goes only if the
 // phone and a connected disk, both read just now, agree on its SHA-256.
 func (s *Server) doPhoneRelease(items []qItem, confirm string, dry bool, job *Job) (any, error) {
-	if !dry && strings.ToLower(strings.TrimSpace(confirm)) != letGoWords {
+	if !dry && !letGo(confirm) {
 		return nil, refuse("confirmation missing")
 	}
 	label, err := oneSource(items)

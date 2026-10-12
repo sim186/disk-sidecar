@@ -122,7 +122,7 @@ affected.
    `<disk>/.sidecar/_quarantine/<date>/…` (a rename on the same disk, so it is instant) and leave
    the index. Nothing is deleted yet.
 3. In the **Farewell box** you can bring any item back. When you are sure, "Release for good…"
-   deletes everything in the box after you type `DELETE`. This is the only step that cannot be
+   releases everything in the box after you type `let it go`. This is the only step that cannot be
    undone, and the only one that frees space.
 
 The server refuses, whatever the page asks: paths outside a disk, files or folders that changed
