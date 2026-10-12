@@ -10,8 +10,9 @@ which only changes when older programs could no longer read or write it safely.
   date), and hide the map with **Hide map** (remembered). Rows can be ticked, and a bar answers Keep, Not sure or
   Let go for all ticked rows at once, in the Map, Search and Duplicates. Photos on a disk also show previews on the Map.
 - Map: a **Photos** view shows the photos and videos of the current folder as a grid of larger previews (256 px,
-  cached apart from the small ones), 120 at a time, with the same Keep / Not sure / Let go switch and tick box on every
-  tile. Videos and files without a preview show their type. Phones show types only: they are never read for previews.
+  cached apart from the small ones), 120 at a time, with a tick box on every tile. Right-click a tile (or press the menu
+  key) to answer Keep, Not sure or Let go, copy it, or show it in the file manager; with several tiles ticked the menu
+  answers for all of them. A small badge on the tile shows its answer. Videos and files without a preview show their type. Phones show types only: they are never read for previews.
 - Tables: the answer is a fixed three-way switch (Keep, Not sure, Let go) with the chosen one filled and a coloured
   edge on the row; paths show the folder quietly above the file name; Share has a bar; the side bar is tighter.
 - Fixed: previews and the Copy to / Show links only appeared after the first click, not on the first draw.

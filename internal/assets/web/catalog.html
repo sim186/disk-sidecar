@@ -150,8 +150,13 @@ tr:has(input.sel:checked) td { background: var(--hover); }
 .pt.m-delete .pbox img { opacity: .45; }
 .pt figcaption { padding-top: .4rem; display: flex; flex-direction: column; gap: .15rem; font-size: .85rem; }
 .pt .pn { font-weight: 700; font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pt .mk.pick { display: flex; margin-top: .3rem; }
-.pt .mk.pick button { width: auto; flex: 1; font-size: .82rem; }
+.pt .chip { position: absolute; top: .45rem; right: .45rem; padding: .1rem .5rem; font-size: .78rem; font-weight: 700; color: var(--paper); pointer-events: none; }
+#ctx { position: fixed; z-index: 58; min-width: 14rem; max-width: 22rem; background: var(--paper); border: 2px solid var(--ink); padding: .25rem 0; box-shadow: 0 6px 18px rgba(0, 0, 0, .25); }
+#ctx .who { padding: .35rem .9rem .4rem; color: var(--muted); font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-bottom: 1px solid var(--rule); margin-bottom: .2rem; }
+#ctx button { display: flex; align-items: center; gap: .6rem; width: 100%; text-align: left; background: none; border: 0; padding: .4rem .9rem; cursor: pointer; }
+#ctx button:hover, #ctx button:focus-visible { background: var(--hover); outline: 0; }
+#ctx button i { width: .65rem; height: .65rem; display: inline-block; flex: none; }
+#ctx hr { border: 0; border-top: 1px solid var(--rule); margin: .2rem 0; }
 
 /* previews: small pictures next to photos, drawn only when they scroll into view */
 td.path .thumb, .group .p .thumb { float: left; margin-top: 1px; }
@@ -376,6 +381,7 @@ td.path .thumb, .group .p .thumb { float: left; margin-top: 1px; }
     <button class="btn quiet" id="selundo">Remove answer</button>
     <button class="btn quiet" id="selclear">Clear selection</button>
   </div>
+  <div id="ctx" class="hide" role="menu"></div>
   <div id="toast" class="hide" role="status"></div>
 </div>
 
@@ -708,11 +714,12 @@ function renderGallery() {
   $('#gallery').innerHTML = !rows.length ? '<p class="muted">No photos or videos here.</p>' :
     `<div class="ghead"><label>Sort <select id="gsort" aria-label="Sort photos">${Object.entries(GAL_SORT).map(([k, v]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${v[2]}</option>`).join('')}</select></label>
        <button class="btn quiet" id="gselall">Select the ${nf.format(rows.length)} shown</button>
+       <span class="muted">Right-click a photo to answer Keep, Not sure or Let go.</span>
        ${actions ? '' : '<span class="muted">Previews need Sidecar started with open-sidecar.</span>'}</div>
      <div class="grid">` + rows.map(r => {
       const m = markOf(r.sid, r.path), i = r.path.lastIndexOf('/'), src = r.kind === 'photo' ? thumbSrc(r.sid, r.path, true) : '', ext = r.path.slice(r.path.lastIndexOf('.') + 1).toLowerCase();
-      return `<figure class="pt${m ? ' m-' + m : ''}"><label class="pbox${src ? '' : ' noimg'}" data-ext="${r.kind === 'video' ? '▶ ' : ''}${esc(ext)}">${src ? `<img class="pimg" loading="lazy" decoding="async" alt="" src="${src}">` : ''}<input type="checkbox" class="sel" data-sid="${r.sid}" data-p="${esc(r.path)}" aria-label="Select ${esc(r.path)}" ${sel.has(mkey(r.sid, r.path)) ? 'checked' : ''}></label>
-        <figcaption><span class="pn" title="${esc(r.path)}">${esc(r.path.slice(i + 1))}</span><span class="muted">${fmt(r.size)}, ${new Date(r.mtime * 1000).toLocaleDateString()}</span>${mkPick(r.sid, r.path)}</figcaption></figure>`;
+      return `<figure class="pt${m ? ' m-' + m : ''}" data-sid="${r.sid}" data-p="${esc(r.path)}"><label class="pbox${src ? '' : ' noimg'}" data-ext="${r.kind === 'video' ? '▶ ' : ''}${esc(ext)}">${src ? `<img class="pimg" loading="lazy" decoding="async" alt="" src="${src}">` : ''}<input type="checkbox" class="sel" data-sid="${r.sid}" data-p="${esc(r.path)}" aria-label="Select ${esc(r.path)}" ${sel.has(mkey(r.sid, r.path)) ? 'checked' : ''}>${m ? `<span class="chip" style="background:${MKCOL[m]}">${MK[m]}</span>` : ''}</label>
+        <figcaption><span class="pn" title="${esc(r.path)}">${esc(r.path.slice(i + 1))}</span><span class="muted">${fmt(r.size)}, ${new Date(r.mtime * 1000).toLocaleDateString()}</span></figcaption></figure>`;
     }).join('') + '</div>' + (total > rows.length ? `<p><button class="btn" id="gmore">Show ${nf.format(Math.min(120, total - rows.length))} more</button></p>` : '');
   const gs = $('#gsort'); if (gs) gs.onchange = () => { const v = GAL_SORT[gs.value]; state.sort = v[0]; state.dir = v[1]; galleryLimit = 120; renderMap(); };
   const gm = $('#gmore'); if (gm) gm.onclick = () => { galleryLimit += 120; renderMap(); };
@@ -979,6 +986,43 @@ document.addEventListener('click', e => {
   setMark(+b.dataset.sid, b.dataset.p, b.dataset.m);
   rerenderCurrent(); renderRail();
 });
+
+/* ---------- right-click menu on photo tiles ---------- */
+function closeCtx() { $('#ctx').classList.add('hide'); }
+$('#gallery').addEventListener('contextmenu', e => {
+  const t = e.target.closest('.pt'); if (!t) return;
+  e.preventDefault();
+  const sid = +t.dataset.sid, path = t.dataset.p, inSel = sel.has(mkey(sid, path)) && sel.size > 1;
+  const items = inSel ? [...sel.values()] : [{ sid, path }];
+  const label = x => (sources.find(s => s.id === x.sid) || {}).label;
+  const anyMarked = items.some(x => marks[mkey(x.sid, x.path)]);
+  const c = $('#ctx');
+  c.innerHTML = `<div class="who">${inSel ? nf.format(items.length) + ' selected' : esc(path.slice(path.lastIndexOf('/') + 1))}</div>` +
+    Object.keys(MK).map(m => `<button role="menuitem" data-a="${m}"><i style="background:${MKCOL[m]}"></i>${MK[m]}</button>`).join('') +
+    (anyMarked ? '<button role="menuitem" data-a="none"><i style="border:1px solid var(--muted)"></i>Remove answer</button>' : '') +
+    (actions ? '<hr><button role="menuitem" data-a="copy">Copy to…</button>' + (!inSel ? `<button role="menuitem" data-a="show">Show in ${FM}</button>` : '') : '');
+  c.classList.remove('hide');
+  c.style.left = Math.max(4, Math.min(e.clientX, innerWidth - c.offsetWidth - 4)) + 'px';
+  c.style.top = Math.max(4, Math.min(e.clientY, innerHeight - c.offsetHeight - 4)) + 'px';
+  c.querySelector('button').focus({ preventScroll: true });
+  c.onclick = ev => {
+    const b = ev.target.closest('button[data-a]'); if (!b) return;
+    const a = b.dataset.a; closeCtx();
+    if (a === 'copy') return openCopy(items.map(x => ({ source: label(x), path: x.path })));
+    if (a === 'show') return api('api/reveal', { source: label(items[0]), path: items[0].path }).catch(err => toast(err.message));
+    setMarks(items, a === 'none' ? null : a);
+    if (inSel) sel.clear();
+    updateSelbar(); rerenderCurrent(); renderRail();
+  };
+});
+document.addEventListener('click', e => { if (!e.target.closest('#ctx')) closeCtx(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeCtx();
+  const c = $('#ctx'); if (c.classList.contains('hide') || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+  e.preventDefault(); const bs = [...c.querySelectorAll('button')], i = bs.indexOf(document.activeElement);
+  bs[(i + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length].focus();
+});
+window.addEventListener('scroll', closeCtx, true); window.addEventListener('resize', closeCtx);
 
 /* ---------- free space on a phone ---------- */
 async function freeOnPhone(items) {
