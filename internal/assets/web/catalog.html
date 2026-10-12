@@ -135,6 +135,24 @@ tr:has(input.sel:checked) td { background: var(--hover); }
 #selbar { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%); z-index: 56; display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1.2rem; background: var(--paper); border: 2px solid var(--ink); padding: .6rem 1rem; max-width: 94vw; }
 #selbar .mk.pick button { width: 4.9rem; }
 
+/* photo grid */
+#gallery .ghead { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.4rem; margin: 1.2rem 0 .9rem; }
+#gallery .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 1.1rem .9rem; }
+.pt { margin: 0; min-width: 0; }
+.pbox { position: relative; display: block; aspect-ratio: 1; background: var(--rule); cursor: pointer; overflow: hidden; }
+.pbox img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pbox.noimg { display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.pbox.noimg::after { content: attr(data-ext); font-size: 1.1rem; }
+.pbox input.sel { position: absolute; top: .45rem; left: .45rem; width: 1.2rem; height: 1.2rem; }
+.pt.m-keep .pbox { outline: 3px solid var(--keep); outline-offset: -3px; }
+.pt.m-review .pbox { outline: 3px solid var(--review); outline-offset: -3px; }
+.pt.m-delete .pbox { outline: 3px solid var(--delete); outline-offset: -3px; }
+.pt.m-delete .pbox img { opacity: .45; }
+.pt figcaption { padding-top: .4rem; display: flex; flex-direction: column; gap: .15rem; font-size: .85rem; }
+.pt .pn { font-weight: 700; font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pt .mk.pick { display: flex; margin-top: .3rem; }
+.pt .mk.pick button { width: auto; flex: 1; font-size: .82rem; }
+
 /* previews: small pictures next to photos, drawn only when they scroll into view */
 td.path .thumb, .group .p .thumb { float: left; margin-top: 1px; }
 .thumb { width: 48px; height: 48px; object-fit: cover; vertical-align: middle; margin-right: .6rem; background: var(--rule); border-radius: 2px; }
@@ -249,12 +267,13 @@ td.path .thumb, .group .p .thumb { float: left; margin-top: 1px; }
       <h1 id="crumbs"></h1>
       <p class="lede" id="mapinfo"></p>
       <div class="toolbar">
-        <div class="seg" id="viewsw" role="group" aria-label="List"><button data-v="folders">Folders</button><button data-v="files">All files</button></div>
+        <div class="seg" id="viewsw" role="group" aria-label="List"><button data-v="folders">Folders</button><button data-v="files">All files</button><button data-v="photos">Photos</button></div>
         <button class="btn quiet" id="maptoggle" aria-expanded="true">Hide map</button>
       </div>
       <div class="kinds" id="legend"></div>
       <div id="treemap"></div>
       <table id="listing"></table>
+      <div id="gallery" class="hide"></div>
     </section>
 
     <section id="tab-search" class="hide">
@@ -378,7 +397,7 @@ const diskParam = new URLSearchParams(location.search).get('disk');   // ?disk=2
 
 let db, sources = [], state = { source: 'all', kind: 'all', prefix: '', view: 'folders', sort: 'size', dir: -1 };
 let mapOpen = true;
-try { mapOpen = localStorage.getItem('sidecar-map') !== 'closed'; if (localStorage.getItem('sidecar-view') === 'files') state.view = 'files'; } catch (e) {}
+try { mapOpen = localStorage.getItem('sidecar-map') !== 'closed'; const v = localStorage.getItem('sidecar-view'); if (v === 'files' || v === 'photos') state.view = v; } catch (e) {}
 
 /* ---------- marks: kept in the index of the disk the file lives on (saved by the server);
    without the server they stay in this browser only ---------- */
@@ -445,8 +464,9 @@ const MK = { keep: 'Keep', review: 'Not sure', delete: 'Let go' };
 const MKCOL = { keep: 'var(--keep)', review: 'var(--review)', delete: 'var(--delete)' };
 const FM = /Mac/i.test(navigator.platform) ? 'Finder' : /Win/i.test(navigator.platform) ? 'Explorer' : 'file manager';
 const isPhone = sid => { const s = sources.find(x => x.id === sid); return !!s && s.kind === 'phone'; };
-const mkButtons = (sid, p) => '<span class="acts"><span class="mk pick" role="group" aria-label="Your answer">' + Object.keys(MK).map(m =>
-  `<button data-m="${m}" data-sid="${sid}" data-p="${esc(p)}" aria-pressed="${marks[mkey(sid, p)] === m}" class="${marks[mkey(sid, p)] === m ? 'on' : ''}">${MK[m]}</button>`).join('') + '</span>' +
+const mkPick = (sid, p) => '<span class="mk pick" role="group" aria-label="Your answer">' + Object.keys(MK).map(m =>
+  `<button data-m="${m}" data-sid="${sid}" data-p="${esc(p)}" aria-pressed="${marks[mkey(sid, p)] === m}" class="${marks[mkey(sid, p)] === m ? 'on' : ''}">${MK[m]}</button>`).join('') + '</span>';
+const mkButtons = (sid, p) => '<span class="acts">' + mkPick(sid, p) +
   (actions ? '<span class="mk more">' +
     `<button class="cp" data-sid="${sid}" data-p="${esc(p)}" title="Copy to another disk or folder; the original stays">Copy to…</button>` +
     (isPhone(sid) ? `<button class="fr" data-sid="${sid}" data-p="${esc(p)}" title="Thank and release from the phone, only what is proven safe on a disk">Let go from phone…</button>` : '') +
@@ -473,13 +493,18 @@ function where(withKind = true) {
 const THUMB_EXT = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tif', 'tiff']);
 let previews = true;
 try { previews = localStorage.getItem('sidecar-previews') !== 'off'; } catch (e) {}
-function thumb(sid, p) {
+function thumbSrc(sid, p, large) {
   if (!previews || !actions) return '';
   const s = sources.find(x => x.id === sid);
   if (!s || s.kind !== 'disk' || !THUMB_EXT.has(p.slice(p.lastIndexOf('.') + 1).toLowerCase())) return '';
-  return `<img class="thumb" loading="lazy" decoding="async" alt="" src="api/thumb?${new URLSearchParams({ source: s.label, path: p, t: TOKEN })}">`;
+  return 'api/thumb?' + new URLSearchParams({ source: s.label, path: p, t: TOKEN, ...(large ? { size: 'large' } : {}) });
 }
-document.addEventListener('error', e => { if (e.target.classList && e.target.classList.contains('thumb')) e.target.remove(); }, true);
+function thumb(sid, p) { const src = thumbSrc(sid, p); return src ? `<img class="thumb" loading="lazy" decoding="async" alt="" src="${src}">` : ''; }
+document.addEventListener('error', e => {
+  const c = e.target.classList; if (!c) return;
+  if (c.contains('thumb')) e.target.remove();
+  else if (c.contains('pimg')) { e.target.parentElement.classList.add('noimg'); e.target.remove(); } // no preview for this one: show its type instead
+}, true);
 
 /* ---------- local server (only when the page is served by serve.py) ---------- */
 const TOKEN = (document.querySelector('meta[name=sidecar-token]') || {}).content || '';
@@ -667,6 +692,32 @@ function sourceRows() { // with several disks, the first level is the disk itsel
     .map(r => ({ ...r, name: (sources.find(s => s.id === r.sid) || {}).label || '?', isdir: 1,
       kind: (q(`SELECT kind FROM files WHERE source_id = ? ${kw} GROUP BY kind ORDER BY SUM(size) DESC LIMIT 1`, [r.sid, ...kp])[0] || {}).kind }));
 }
+/* photo grid: only photos and videos, the big previews, a page of tiles at a time */
+let galleryLimit = 120, galleryScope = '';
+const GAL_SORT = { 'size-desc': ['size', -1, 'Largest first'], 'mtime-desc': ['mtime', -1, 'Newest first'], 'mtime-asc': ['mtime', 1, 'Oldest first'], 'name-asc': ['name', 1, 'Name'] };
+function renderGallery() {
+  const [w, p] = where(false), pre = prefixOf();
+  const scope = [state.source, state.prefix, state.kind].join('|'); if (scope !== galleryScope) { galleryScope = scope; galleryLimit = 120; }
+  const kinds = state.kind === 'photo' || state.kind === 'video' ? [state.kind] : ['photo', 'video'];
+  const base = `FROM files WHERE substr(path,1,?) = ? AND kind IN (${kinds.map(() => '?').join(',')}) ${w}`, bp = [pre.length, pre, ...kinds, ...p];
+  const total = q('SELECT COUNT(*) n ' + base, bp)[0].n;
+  const col = { name: 'name COLLATE NOCASE', size: 'size', mtime: 'mtime' }[state.sort] || 'size';
+  const rows = q(`SELECT source_id sid, path, size, mtime, kind ${base} ORDER BY ${col} ${state.dir > 0 ? 'ASC' : 'DESC'}, path LIMIT ?`, [...bp, galleryLimit]);
+  const cur = Object.keys(GAL_SORT).find(k => GAL_SORT[k][0] === state.sort && GAL_SORT[k][1] === state.dir) || 'size-desc';
+  $('#mapinfo').textContent += ` ${nf.format(total)} photos and videos here` + (total > rows.length ? `, showing ${nf.format(rows.length)}.` : '.');
+  $('#gallery').innerHTML = !rows.length ? '<p class="muted">No photos or videos here.</p>' :
+    `<div class="ghead"><label>Sort <select id="gsort" aria-label="Sort photos">${Object.entries(GAL_SORT).map(([k, v]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${v[2]}</option>`).join('')}</select></label>
+       <button class="btn quiet" id="gselall">Select the ${nf.format(rows.length)} shown</button>
+       ${actions ? '' : '<span class="muted">Previews need Sidecar started with open-sidecar.</span>'}</div>
+     <div class="grid">` + rows.map(r => {
+      const m = markOf(r.sid, r.path), i = r.path.lastIndexOf('/'), src = r.kind === 'photo' ? thumbSrc(r.sid, r.path, true) : '', ext = r.path.slice(r.path.lastIndexOf('.') + 1).toLowerCase();
+      return `<figure class="pt${m ? ' m-' + m : ''}"><label class="pbox${src ? '' : ' noimg'}" data-ext="${r.kind === 'video' ? '▶ ' : ''}${esc(ext)}">${src ? `<img class="pimg" loading="lazy" decoding="async" alt="" src="${src}">` : ''}<input type="checkbox" class="sel" data-sid="${r.sid}" data-p="${esc(r.path)}" aria-label="Select ${esc(r.path)}" ${sel.has(mkey(r.sid, r.path)) ? 'checked' : ''}></label>
+        <figcaption><span class="pn" title="${esc(r.path)}">${esc(r.path.slice(i + 1))}</span><span class="muted">${fmt(r.size)}, ${new Date(r.mtime * 1000).toLocaleDateString()}</span>${mkPick(r.sid, r.path)}</figcaption></figure>`;
+    }).join('') + '</div>' + (total > rows.length ? `<p><button class="btn" id="gmore">Show ${nf.format(Math.min(120, total - rows.length))} more</button></p>` : '');
+  const gs = $('#gsort'); if (gs) gs.onchange = () => { const v = GAL_SORT[gs.value]; state.sort = v[0]; state.dir = v[1]; galleryLimit = 120; renderMap(); };
+  const gm = $('#gmore'); if (gm) gm.onclick = () => { galleryLimit += 120; renderMap(); };
+  const ga = $('#gselall'); if (ga) ga.onclick = () => { $('#gallery').querySelectorAll('input.sel').forEach(x => { x.checked = true; sel.set(mkey(x.dataset.sid, x.dataset.p), { sid: +x.dataset.sid, path: x.dataset.p }); }); updateSelbar(); };
+}
 function fileListHtml(bySource) {
   const [w, p] = where(), pre = prefixOf(), multi = sources.length > 1;
   const col = { name: 'name COLLATE NOCASE', size: 'size', mtime: 'mtime' }[state.sort] || 'size';
@@ -715,13 +766,15 @@ function renderMap() {
     else state.prefix = prefixOf() + el.dataset.name;
     renderMap();
   });
-  $('#listing').innerHTML = state.view === 'files' ? fileListHtml(bySource) : kids.length ? '<tr>' + (bySource ? '' : selHead) + '<th>Name</th><th class="num">Files</th><th class="num">Size</th><th>Share of this view</th><th>Does it spark joy?</th></tr>' +
+  $('#listing').innerHTML = state.view === 'photos' ? '' : state.view === 'files' ? fileListHtml(bySource) : kids.length ? '<tr>' + (bySource ? '' : selHead) + '<th>Name</th><th class="num">Files</th><th class="num">Size</th><th>Share of this view</th><th>Does it spark joy?</th></tr>' +
     kids.slice(0, 200).map((k, ix) => {
       const full = prefixOf() + k.name, pct = total ? k.size / total * 100 : 0;
       const dot = ix < 60 ? `<span class="dot" style="background:${kcol(bySource ? k.kind : k.isdir ? dominantKind(k.name) : k.kind)}"></span>` : '<span class="dot" style="background:transparent"></span>';
       return `<tr${bySource ? '' : rowCls(k.sid, full)}>${bySource ? '' : selCell(k.sid, full)}<td class="name">${dot}${!k.isdir ? thumb(k.sid, full) : ''}${k.isdir ? `<span class="link" ${bySource ? `data-src-go="${k.sid}"` : `data-go="${esc(full)}"`}>${esc(k.name)}${bySource ? '' : '/'}</span>` : esc(k.name)}</td><td class="num">${nf.format(k.n)}</td><td class="num">${fmt(k.size)}</td><td class="share"><span class="bar"><i style="width:${Math.max(2, Math.round(pct))}%"></i></span>${pct.toLocaleString(undefined, { maximumFractionDigits: 1 })}%</td><td>${bySource ? '' : mkButtons(k.sid, full)}</td></tr>`;
     }).join('') : '<tr><td class="muted">Nothing to show with these filters.</td></tr>';
   if (state.view === 'files') $('#mapinfo').textContent += ' Listing up to 300 files below, sorted by ' + ({ name: 'name', size: 'size', mtime: 'date' }[state.sort]) + '.';
+  $('#listing').classList.toggle('hide', state.view === 'photos'); $('#gallery').classList.toggle('hide', state.view !== 'photos');
+  if (state.view === 'photos') renderGallery();
   $('#listing').querySelectorAll('[data-go]').forEach(a => a.onclick = () => { state.prefix = a.dataset.go; renderMap(); });
   $('#listing').querySelectorAll('[data-src-go]').forEach(a => a.onclick = () => { state.source = a.dataset.srcGo; state.prefix = ''; renderRail(); renderMap(); });
 }

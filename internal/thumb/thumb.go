@@ -30,6 +30,9 @@ import (
 // Size is the longest side of a preview, in pixels. The page shows it at half this, for sharp screens.
 const Size = 128
 
+// Large is the longest side of the bigger previews of the photo grid.
+const Large = 256
+
 const (
 	maxFileBytes = 64 << 20 // bigger files are not decoded
 	maxPixels    = 50_000_000
@@ -53,6 +56,11 @@ func CanPreview(ext string) bool {
 // Get returns a JPEG preview of the file at path. cacheDir may be empty to skip the cache. It
 // waits for a free worker, and gives up with ctx.Err() if the caller leaves first.
 func Get(ctx context.Context, path, cacheDir string) ([]byte, error) {
+	return GetSize(ctx, path, cacheDir, Size)
+}
+
+// GetSize is Get with the longest side of the preview chosen: Size or Large.
+func GetSize(ctx context.Context, path, cacheDir string, size int) ([]byte, error) {
 	st, err := os.Stat(path)
 	if err != nil {
 		return nil, err
@@ -66,7 +74,7 @@ func Get(ctx context.Context, path, cacheDir string) ([]byte, error) {
 	}
 	var cached string
 	if cacheDir != "" {
-		h := sha1.Sum([]byte(path + "|" + st.ModTime().UTC().String() + "|" + strconv.FormatInt(st.Size(), 10)))
+		h := sha1.Sum([]byte(path + "|" + st.ModTime().UTC().String() + "|" + strconv.FormatInt(st.Size(), 10) + "|" + strconv.Itoa(size)))
 		cached = filepath.Join(cacheDir, hex.EncodeToString(h[:])+".jpg")
 		if b, err := os.ReadFile(cached); err == nil {
 			return b, nil
@@ -78,7 +86,7 @@ func Get(ctx context.Context, path, cacheDir string) ([]byte, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	b, err := make1(path, ext)
+	b, err := make1(path, ext, size)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +99,7 @@ func Get(ctx context.Context, path, cacheDir string) ([]byte, error) {
 	return b, nil
 }
 
-func make1(path, ext string) ([]byte, error) {
+func make1(path, ext string, size int) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -107,7 +115,7 @@ func make1(path, ext string) ([]byte, error) {
 		var thumb []byte
 		thumb, orient = exif(head)
 		if thumb != nil {
-			if t, err := jpeg.Decode(bytes.NewReader(thumb)); err == nil && t.Bounds().Dx() >= 64 && t.Bounds().Dy() >= 64 {
+			if t, err := jpeg.Decode(bytes.NewReader(thumb)); err == nil && t.Bounds().Dx() >= 64 && t.Bounds().Dy() >= 64 && max(t.Bounds().Dx(), t.Bounds().Dy()) >= size*6/10 { // a camera's own thumbnail is about 160 px: enough unless the size asked is much bigger
 				img = t
 			}
 		}
@@ -136,21 +144,21 @@ func make1(path, ext string) ([]byte, error) {
 			return nil, err
 		}
 	}
-	return encode(orientate(shrink(img), orient))
+	return encode(orientate(shrink(img, size), orient))
 }
 
-func shrink(src image.Image) image.Image {
+func shrink(src image.Image, size int) image.Image {
 	b := src.Bounds()
 	w, h := b.Dx(), b.Dy()
-	if w <= Size && h <= Size {
+	if w <= size && h <= size {
 		return src
 	}
 	if w >= h {
-		h = max(1, h*Size/w)
-		w = Size
+		h = max(1, h*size/w)
+		w = size
 	} else {
-		w = max(1, w*Size/h)
-		h = Size
+		w = max(1, w*size/h)
+		h = size
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, b, draw.Src, nil)

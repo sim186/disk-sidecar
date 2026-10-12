@@ -48,6 +48,31 @@ func TestPreviewIsSmallJPEGAndIsCached(t *testing.T) {
 	}
 }
 
+func TestLargePreviewIsBiggerAndCachedApart(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "a.png")
+	writePNG(t, p, 600, 300)
+	cache := filepath.Join(dir, "cache")
+	small, err := Get(context.Background(), p, cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	big, err := GetSize(context.Background(), p, cache, Large)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := jpeg.Decode(bytes.NewReader(big))
+	if err != nil || img.Bounds().Dx() != Large || img.Bounds().Dy() != Large/2 {
+		t.Fatalf("large preview: %v %v", err, img.Bounds())
+	}
+	if len(big) <= len(small) {
+		t.Fatal("the large preview should carry more detail")
+	}
+	if e, _ := os.ReadDir(cache); len(e) != 2 {
+		t.Fatalf("each size is cached on its own, got %d files", len(e))
+	}
+}
+
 func TestOtherTypesAndCancelledCallers(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.bin")

@@ -27,7 +27,11 @@ func (s *Server) serveThumb(w http.ResponseWriter, r *http.Request) {
 	if d, err := os.UserCacheDir(); err == nil {
 		cache = filepath.Join(d, "disk-sidecar", "thumbs")
 	}
-	b, err := thumb.Get(r.Context(), full, cache)
+	size := thumb.Size
+	if q.Get("size") == "large" {
+		size = thumb.Large
+	}
+	b, err := thumb.GetSize(r.Context(), full, cache, size)
 	if err != nil {
 		if r.Context().Err() != nil {
 			return // the page scrolled on
