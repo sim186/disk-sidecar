@@ -170,7 +170,7 @@ type move struct {
 }
 
 // plan validates the items of ONE disk index (raw labels) and returns what would be moved.
-func plan(db *sql.DB, items []struct{ Source, Path string }, job *Job, diskRoot string) ([]*move, error) {
+func plan(db *sql.DB, items []struct{ Source, Path string }, job *Job, diskRoot string, guard func(string) error) ([]*move, error) {
 	type sr struct {
 		sid  int64
 		root string
@@ -198,7 +198,7 @@ func plan(db *sql.DB, items []struct{ Source, Path string }, job *Job, diskRoot 
 			parts := strings.Split(it.Path, "/")
 			job.Update(fmt.Sprintf("Checking %d/%d: %s", n+1, len(items), parts[len(parts)-1]), 0, 0)
 		}
-		m, err := planOne(db, srcs[it.Source].sid, srcs[it.Source].root, it.Source, it.Path)
+		m, err := planOne(db, srcs[it.Source].sid, srcs[it.Source].root, it.Source, it.Path, guard)
 		if err != nil {
 			var r *Refused
 			if ok := asRefused(err, &r); ok {
@@ -239,13 +239,16 @@ func asRefused(err error, out **Refused) bool {
 	return ok
 }
 
-func planOne(db *sql.DB, sid int64, root, label, rel string) (*move, error) {
+func planOne(db *sql.DB, sid int64, root, label, rel string, guard func(string) error) (*move, error) {
 	if !dirExists(root) {
 		return nil, refuse("%s: the disk is not reachable from this computer (%s)", label, root)
 	}
 	full := filepath.Join(root, filepath.FromSlash(rel))
 	if !inside(root, full) {
 		return nil, refuse("%s: outside the source", rel)
+	}
+	if err := guard(full); err != nil {
+		return nil, refuse("%s: %v", rel, err)
 	}
 	lst, err := os.Lstat(full)
 	if err != nil {
@@ -406,7 +409,9 @@ type qItem struct {
 	Path   string `json:"path"`
 }
 
-func (s *Server) doQuarantine(items []qItem, job *Job) (any, error) {
+// planItems validates items that live on any number of disks and returns what they hold. The
+// caller must call done to close the index handles; handles are by index path.
+func (s *Server) planItems(items []qItem, job *Job, verb string) (plans []*move, handles map[string]*sql.DB, disks []*Disk, done func(), err error) {
 	srcs, disks := s.listSources()
 	by := map[string]*Src{}
 	for _, x := range srcs {
@@ -421,14 +426,14 @@ func (s *Server) doQuarantine(items []qItem, job *Job) (any, error) {
 	for _, it := range items {
 		src := by[it.Source]
 		if src == nil {
-			return nil, refuse("unknown source: %s", it.Source)
+			return nil, nil, nil, nil, refuse("unknown source: %s", it.Source)
 		}
 		if src.Kind != "disk" {
-			return nil, refuse("%s is a read-only snapshot: its files cannot be moved", src.Label)
+			return nil, nil, nil, nil, refuse("%s is a read-only snapshot: its files cannot be %s", src.Label, verb)
 		}
 		rel, err := cleanRel(it.Path)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, nil, err
 		}
 		g := groups[src.DB]
 		if g == nil {
@@ -438,29 +443,39 @@ func (s *Server) doQuarantine(items []qItem, job *Job) (any, error) {
 		}
 		g.items = append(g.items, struct{ Source, Path string }{src.Raw, rel})
 	}
-	var plans []*move
-	var handles []*sql.DB
-	defer func() {
+	handles = map[string]*sql.DB{}
+	done = func() {
 		for _, h := range handles {
 			h.Close()
 		}
-	}()
+	}
 	for _, dbPath := range order {
 		g := groups[dbPath]
 		db, err := idx.Open(dbPath)
 		if err != nil {
-			return nil, err
+			done()
+			return nil, nil, nil, nil, err
 		}
-		handles = append(handles, db)
-		ms, err := plan(db, g.items, job, g.disk.Root)
+		handles[dbPath] = db
+		ms, err := plan(db, g.items, job, g.disk.Root, s.guardPath)
 		if err != nil {
-			return nil, err
+			done()
+			return nil, nil, nil, nil, err
 		}
 		for _, m := range ms {
 			m.db, m.disk = db, g.disk
 			plans = append(plans, m)
 		}
 	}
+	return plans, handles, disks, done, nil
+}
+
+func (s *Server) doQuarantine(items []qItem, job *Job) (any, error) {
+	plans, _, disks, closeAll, err := s.planItems(items, job, "moved")
+	if err != nil {
+		return nil, err
+	}
+	defer closeAll()
 	if len(plans) == 0 {
 		return nil, refuse("nothing to move")
 	}
@@ -653,6 +668,9 @@ func (s *Server) doRestore(moveID string) (any, error) {
 	full, qfull := filepath.Join(src.Root, filepath.FromSlash(rel)), filepath.Join(src.Root, filepath.FromSlash(qrel))
 	if !dirExists(src.Root) {
 		return nil, refuse("the disk is not reachable")
+	}
+	if err := s.guardPath(full); err != nil {
+		return nil, refuse("%s: %v", rel, err)
 	}
 	if _, err := os.Lstat(full); err == nil {
 		return nil, refuse("%s: a file or folder with that name already exists; not overwriting", rel)

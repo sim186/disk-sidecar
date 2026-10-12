@@ -132,6 +132,7 @@ func Run(o Options) (Stats, error) {
 		return st, err
 	}
 
+	homeMode := isHome(root) // the user's home folder: leave out the folders where programs keep their data
 	type fsig struct{ size, mtime int64 }
 	known := map[string]fsig{}
 	rows, err := db.Query(`SELECT path, size, mtime FROM files WHERE source_id=?`, sid)
@@ -178,6 +179,9 @@ func Run(o Options) (Stats, error) {
 		name := d.Name()
 		if d.IsDir() {
 			if path != root && idx.SkipDirs[name] {
+				return fs.SkipDir
+			}
+			if homeMode && filepath.Dir(path) == root && (name == "Library" || name == "AppData" || strings.HasPrefix(name, ".")) {
 				return fs.SkipDir
 			}
 			return nil
@@ -313,4 +317,19 @@ func Run(o Options) (Stats, error) {
 func (st Stats) Summary(label string) string {
 	return fmt.Sprintf("[%s] %d files, %.1f GB | new %d, changed %d, same %d, removed %d, errors %d | %.0fs", label, st.Total,
 		float64(st.Size)/1e9, st.New, st.Changed, st.Same, st.Removed, st.Errors, st.Secs)
+}
+
+func isHome(root string) bool {
+	h, err := os.UserHomeDir()
+	if err != nil || h == "" {
+		return false
+	}
+	a, b := root, h
+	if r, err := filepath.EvalSymlinks(a); err == nil {
+		a = r
+	}
+	if r, err := filepath.EvalSymlinks(b); err == nil {
+		b = r
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
 }

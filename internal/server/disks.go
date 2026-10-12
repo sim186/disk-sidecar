@@ -118,6 +118,9 @@ func (s *Server) discover() []*Disk {
 	for _, p := range s.mountCandidates() {
 		add(p, filepath.Join(p, ".sidecar", "index.db"))
 	}
+	if h, err := os.UserHomeDir(); err == nil && h != "" && !s.cfg.NoDefaultMounts { // this computer, once it has been set up
+		add(h, filepath.Join(h, ".sidecar", "index.db"))
+	}
 	return disks
 }
 

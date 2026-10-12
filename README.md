@@ -69,21 +69,43 @@ time. On a Mac, if a downloaded file is refused, run `xattr -d com.apple.quarant
   (same name and size) into "identical" (same SHA-256).
 - **Compare**: pick two folders, even on different disks: what is only in A, only in B, in both,
   and whether one is entirely redundant.
-- **Marked**: next to every file and folder, *keep*, *delete* and *review* are notes to yourself. A mark on a folder covers what is inside. Marks are saved in the
-  index of the disk the file lives on.
-- **Quarantine**: see below.
+- **Tidying piles**: in the spirit of Marie Kondo, hold each file or folder and ask *does it spark joy?*
+  Next to it, sort it into *keep*, *spark joy?* (still deciding) or *let go*. A choice on a folder covers what is
+  inside. Piles are saved in the index of the disk the file lives on.
+- **Farewell box**: where the "let go" pile waits to be released; see below.
 
 On the disk, `.sidecar/sidecar` (`sidecar.cmd` on Windows) runs the right build for the computer
 you are on: `./sidecar serve | scan | hash | merge | mcp | version | install`.
 
+### Copying
+
+Next to every file and folder, **copy to…** copies it to a folder on any connected disk, the same one too.
+In *Tidying piles*, "Copy the “keep” pile to…" does it for everything you kept. The originals are never touched.
+Each file is written under a temporary name, read back from the destination and compared (SHA-256) before it
+gets its final name; its modification time is kept; nothing is ever overwritten; if one file of a folder
+fails, none of that folder is kept. The copies appear in the catalog at once. To *move*, copy first and then
+put the original in the *let go* pile: because the copy is now a proven duplicate, Sidecar lets the original go
+(but never both copies). Empty folders are not copied.
+
+### This computer
+
+The system disk is not an external disk, so Sidecar does not offer it when it finds one. To catalog it, choose
+**This computer** in the install dialog ("Install on a disk…"), or run `sidecar install ~` (Windows:
+`sidecar install %USERPROFILE%`). That installs into `~/.sidecar` and scans your home folder, leaving out
+`Library`, `AppData` and hidden folders. On the system disk Sidecar only ever changes files inside a user
+folder: moving to the farewell box, restoring and copying are refused on the operating system, programs, other
+users' folders, the home folder itself and the folders where programs keep their data. Marks are notes
+and still work everywhere. Disks mounted under `/Volumes`, `/media`, `/mnt` or another drive letter are not
+affected.
+
 ### Freeing space
 
-1. Mark files or folders *delete*.
-2. In **Marked**, choose "Move files marked delete to quarantine". A progress bar shows the move. The files go to
+1. Put files or folders in the *let go* pile.
+2. In **Tidying piles**, choose "Thank them and move the “let go” pile to the farewell box". A progress bar shows the move. The files go to
    `<disk>/.sidecar/_quarantine/<date>/…` (a rename on the same disk, so it is instant) and leave
    the index. Nothing is deleted yet.
-3. In **Quarantine** you can restore any item. When you are sure, "Delete permanently…"
-   deletes everything in quarantine after you type `DELETE`. This is the only step that cannot be
+3. In the **Farewell box** you can bring any item back. When you are sure, "Release for good…"
+   deletes everything in the box after you type `DELETE`. This is the only step that cannot be
    undone, and the only one that frees space.
 
 The server refuses, whatever the page asks: paths outside a disk, files or folders that changed

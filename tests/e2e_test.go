@@ -337,7 +337,12 @@ func freePort(t *testing.T) int {
 }
 
 // newServer builds two plugged-in disks and a snapshot of a third computer, and serves them.
-func newServer(t *testing.T) *srv {
+func newServer(t *testing.T) *srv { return newServerHome(t, "") }
+
+// newServerHome is newServer with the user's home folder at tmp/home. The system-disk guard only lets
+// Sidecar change files inside a home folder (or on a disk mounted under /Volumes, /media, /mnt), so the
+// plain newServer makes the whole fake world a home folder; with home set, the fake disks are "system".
+func newServerHome(t *testing.T, home string) *srv {
 	tmp := tempDir(t)
 	s := &srv{t: t, vol: filepath.Join(tmp, "Volumes")}
 	s.A, s.B = s.vol+"/DiskA", s.vol+"/DiskB"
@@ -367,6 +372,12 @@ func newServer(t *testing.T) *srv {
 
 	s.port = freePort(t)
 	cmd := exec.Command(s.A+"/.sidecar/"+discBin(), "serve", "--port", fmt.Sprint(s.port), "--no-open", "--no-update-check", "--no-default-mounts", "--mounts", s.vol)
+	h := tmp
+	if home != "" {
+		h = filepath.Join(tmp, home)
+		os.MkdirAll(h, 0o755)
+	}
+	cmd.Env = append(os.Environ(), "HOME="+h, "USERPROFILE="+h)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -637,6 +648,123 @@ func TestServerRefusesChangedFiles(t *testing.T) {
 }
 
 var _ = sql.ErrNoRows
+
+func TestServerCopiesBetweenDisksAndVerifies(t *testing.T) {
+	s := newServer(t)
+	s.waitStartup()
+	item := func(src, p string) map[string]string { return map[string]string{"source": src, "path": p} }
+	cp := func(items []any, toSrc, toPath string) (string, map[string]any, string) {
+		return s.job("/api/copy", map[string]any{"items": items, "to": item(toSrc, toPath)})
+	}
+	ia, ib := s.A+"/.sidecar/index.db", s.B+"/.sidecar/index.db"
+
+	// one file, to a folder that does not exist yet
+	want, _ := os.ReadFile(s.A + "/foto/onlyA.bin")
+	st, res, msg := cp([]any{item("Disk A", "foto/onlyA.bin")}, "Disk B", "from-a/2026")
+	if st != "done" || res["copied"] != 1.0 || res["files"] != 1.0 {
+		t.Fatalf("copy: %s %v %s", st, res, msg)
+	}
+	got, _ := os.ReadFile(s.B + "/from-a/2026/onlyA.bin")
+	if !bytes.Equal(got, want) || !exists(s.A+"/foto/onlyA.bin") {
+		t.Fatal("copy differs, or the original is gone")
+	}
+	fa, _ := os.Stat(s.A + "/foto/onlyA.bin")
+	fb, _ := os.Stat(s.B + "/from-a/2026/onlyA.bin")
+	if fa.ModTime().Unix() != fb.ModTime().Unix() {
+		t.Fatalf("modification time not kept: %v %v", fa.ModTime(), fb.ModTime())
+	}
+	if n := count(t, ib, "select count(*) from files where path='from-a/2026/onlyA.bin' and sha256 is not null and top='from-a'"); n != 1 {
+		t.Fatal("the copy is not in the index of its disk")
+	}
+	if n := count(t, ia, "select count(*) from files where path='foto/onlyA.bin' and sha256 is not null"); n != 1 {
+		t.Fatal("the original did not learn its hash")
+	}
+	if exists(s.B + "/from-a/2026/onlyA.bin" + ".sidecar-part") {
+		t.Fatal("temporary file left behind")
+	}
+	// the copy is now a proven duplicate: letting one go is allowed, both together never
+	if st, _, msg := s.job("/api/quarantine", map[string]any{"items": []any{item("Disk A", "foto/onlyA.bin"), item("Disk B", "from-a/2026/onlyA.bin")}}); st != "error" || !strings.Contains(msg, "ALL copies") {
+		t.Fatalf("both copies: %s %s", st, msg)
+	}
+	if st, _, msg := s.job("/api/quarantine", map[string]any{"items": []any{item("Disk A", "foto/onlyA.bin")}}); st != "done" {
+		t.Fatalf("original after copy: %s %s", st, msg)
+	}
+
+	// a folder, with text kept searchable
+	if st, res, msg := cp([]any{item("Disk A", "doc")}, "Disk B", ""); st != "done" || res["files"].(float64) < 2 {
+		t.Fatalf("folder: %s %v %s", st, res, msg)
+	}
+	if !exists(s.B+"/doc/note.txt") || count(t, ib, "select count(*) from files where path like 'doc/%'") < 2 {
+		t.Fatal("folder not copied or not indexed")
+	}
+	_, found := s.do("GET", "/api/search?q=ciao&kind=all", nil, true, "")
+	hit := false
+	for _, r := range found["rows"].([]any) {
+		hit = hit || (r.(map[string]any)["source"] == "Disk B" && r.(map[string]any)["path"] == "doc/note.txt")
+	}
+	if !hit {
+		t.Fatalf("copied text not searchable: %v", found)
+	}
+
+	// refusals
+	for what, c := range map[string]struct {
+		items []any
+		src   string
+		path  string
+		want  string
+	}{
+		"overwrite":    {[]any{item("Disk A", "doc")}, "Disk B", "", "already exists"},
+		"into itself":  {[]any{item("Disk A", "doc")}, "Disk A", "doc/inner", "into itself"},
+		"snapshot":     {[]any{item("Disk A", "doc")}, "Laptop", "x", "read-only"},
+		"unknown disk": {[]any{item("Disk A", "doc")}, "Nope", "x", "unknown"},
+		"bad path":     {[]any{item("Disk A", "doc")}, "Disk B", "../x", "invalid path"},
+		"inside index": {[]any{item("Disk A", "doc")}, "Disk B", ".sidecar/x", "invalid path"},
+		"from a snap":  {[]any{item("Laptop", "Foto/shared.bin")}, "Disk B", "y", "read-only"},
+		"two same":     {[]any{item("Disk A", "foto/shared.bin"), item("Disk B", "backup/shared.bin")}, "Disk B", "z", "both called"},
+	} {
+		st, _, msg := cp(c.items, c.src, c.path)
+		if st == "done" || !strings.Contains(msg, c.want) {
+			t.Errorf("%s: %s %q", what, st, msg)
+		}
+	}
+	if exists(s.A + "/doc/inner") {
+		t.Fatal("folder copied into itself")
+	}
+	// a file changed since the scan is not copied
+	time.Sleep(1100 * time.Millisecond)
+	write(t, s.A+"/doc/note.txt", "changed!")
+	if st, _, msg := cp([]any{item("Disk A", "doc/note.txt")}, "Disk B", "again"); st != "error" || !strings.Contains(msg, "modified") {
+		t.Fatalf("changed: %s %s", st, msg)
+	}
+	if exists(s.B + "/again") {
+		t.Fatal("something was copied from a changed file")
+	}
+}
+
+func TestServerNeverTouchesTheSystemDiskOutsideUserFolders(t *testing.T) {
+	s := newServerHome(t, "home") // the fake disks are not under the user's home: they play the system disk
+	s.waitStartup()
+	item := func(src, p string) map[string]string { return map[string]string{"source": src, "path": p} }
+	for _, c := range []struct {
+		path string
+		body map[string]any
+	}{
+		{"/api/quarantine", map[string]any{"items": []any{item("Disk A", "foto/onlyA.bin")}}},
+		{"/api/copy", map[string]any{"items": []any{item("Disk A", "foto/onlyA.bin")}, "to": item("Disk B", "x")}},
+	} {
+		st, _, msg := s.job(c.path, c.body)
+		if st != "error" || !strings.Contains(msg, "outside your user folders") {
+			t.Errorf("%s: %s %q", c.path, st, msg)
+		}
+	}
+	if !exists(s.A+"/foto/onlyA.bin") || exists(s.B+"/x") || exists(s.A+"/.sidecar/_quarantine") {
+		t.Fatal("something changed on the system disk")
+	}
+	// marks are notes: they still work
+	if c, _ := s.call("/api/marks", map[string]any{"items": []any{map[string]string{"source": "Disk A", "path": "foto/onlyA.bin", "mark": "keep"}}}); c != 200 {
+		t.Fatalf("marks: %d", c)
+	}
+}
 
 // A fake GitHub says a newer release exists; a plain folder is offered as a disk to install on.
 func TestServerUpdateNoticeAndInstallOnADisk(t *testing.T) {

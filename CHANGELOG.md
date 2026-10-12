@@ -4,6 +4,19 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
+## 0.6.0
+
+- Copy to another disk or folder (**copy to…** next to files and folders, and for the whole *keep* pile). Files are
+  verified after copying, never overwritten, and indexed at once. Moving is copy, then let the original go.
+- "This computer": Sidecar can be installed on the system disk (in `~/.sidecar`, cataloguing the home folder). There
+  it refuses to move, restore or copy anything outside the user's own folders.
+- A gentler vocabulary, after Marie Kondo. In the app, **Marked** is now *Tidying piles* (*keep*, *spark joy?*,
+  *let go*) and **Quarantine** is the *Farewell box*, where things are thanked before they are released for
+  good. Only the words changed: the index, the API, the MCP server and the `DELETE` confirmation are the same.
+- Fixed: with the install dialog open, plugging in a disk also raised the corner prompt, and accepting that one
+  left the dialog stuck on top. Now the dialog adds the new disk to its list, and accepting the corner prompt
+  closes the dialog.
+
 ## 0.5.0
 
 - Double clicking the program (no command) opens the app. If no disk has a sidecar yet it asks where to

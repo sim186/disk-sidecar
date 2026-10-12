@@ -170,7 +170,27 @@ func plan(o Options) ([]item, error) {
 	return items, nil
 }
 
+// IsHome tells whether dir is the home folder of the user running this program: the system
+// disk is installed there, not at its root.
+func IsHome(dir string) bool {
+	h, err := os.UserHomeDir()
+	if err != nil || h == "" {
+		return false
+	}
+	a, b := dir, h
+	if r, err := filepath.EvalSymlinks(a); err == nil {
+		a = r
+	}
+	if r, err := filepath.EvalSymlinks(b); err == nil {
+		b = r
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
+}
+
 func isDiskRoot(disk string) bool {
+	if IsHome(disk) {
+		return true
+	}
 	if runtime.GOOS == "windows" {
 		return strings.EqualFold(disk, filepath.VolumeName(disk)+`\`)
 	}
@@ -278,9 +298,18 @@ func Run(o Options) error {
 		exec.Command("attrib", "+h", target).Run()
 	}
 	tidy(target)
-	launcher := writeLaunchers(disk, o.Out)
+	home := IsHome(disk)
+	var launcher string
+	if home { // no launcher among the user's files: the one in .sidecar is enough
+		launcher = filepath.Join(target, tern(runtime.GOOS == "windows", "open-sidecar.bat", "open-sidecar.command"))
+	} else {
+		launcher = writeLaunchers(disk, o.Out)
+	}
 
 	label := o.Label
+	if label == "" && home {
+		label = "This computer"
+	}
 	if label == "" {
 		label = filepath.Base(disk)
 		if label == "" || label == `\` || label == "/" {

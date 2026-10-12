@@ -108,6 +108,9 @@ func (s *Server) volumes() []Volume {
 		out = append(out, Volume{Path: p, Name: diskName(p), HasSidecar: have[realpath(p)]})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	if h, err := os.UserHomeDir(); err == nil && h != "" && !s.cfg.NoDefaultMounts && dirExists(h) { // the system disk: your user folder only
+		out = append(out, Volume{Path: h, Name: "This computer", HasSidecar: have[realpath(h)]})
+	}
 	return out
 }
 

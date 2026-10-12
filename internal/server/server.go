@@ -296,6 +296,13 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 			return
 		}
 		startJob(func(j *Job) (any, error) { return s.doQuarantine(d.Items, j) })
+	case "/api/copy":
+		var d copyReq
+		if err := json.Unmarshal(body, &d); err != nil {
+			bad(err)
+			return
+		}
+		startJob(func(j *Job) (any, error) { return s.doCopy(d, j) })
 	case "/api/empty":
 		var d struct {
 			Confirm string `json:"confirm"`
