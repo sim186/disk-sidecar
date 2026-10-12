@@ -567,7 +567,7 @@ function renderMap() {
     else state.prefix = prefixOf() + el.dataset.name;
     renderMap();
   });
-  $('#listing').innerHTML = kids.length ? '<tr><th>Name</th><th class="num">Files</th><th class="num">Size</th><th class="num">Share</th><th>Sort</th></tr>' +
+  $('#listing').innerHTML = kids.length ? '<tr><th>Name</th><th class="num">Files</th><th class="num">Size</th><th class="num">Share</th><th>Does it spark joy?</th></tr>' +
     kids.slice(0, 200).map(k => {
       const full = prefixOf() + k.name;
       return `<tr><td>${k.isdir ? `<span class="link" ${bySource ? `data-src-go="${k.sid}"` : `data-go="${esc(full)}"`}>${esc(k.name)}${bySource ? '' : '/'}</span>` : esc(k.name)}</td><td class="num">${nf.format(k.n)}</td><td class="num">${fmt(k.size)}</td><td class="num">${total ? (k.size / total * 100).toLocaleString(undefined, { maximumFractionDigits: 1 }) : 0}%</td><td>${bySource ? '' : mkButtons(k.sid, full)}</td></tr>`;
@@ -611,7 +611,7 @@ async function runSearch() {
   $('#sinfo').textContent = (rows.length ? `${nf.format(rows.length)} results${rows.length >= 150 ? ', showing the first 150' : ''}.` : 'No results.') + note;
   const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/&/g, '&amp;'), 'ig');
   const hl = s => esc(s).replace(re, m => `<mark>${m}</mark>`);
-  $('#results').innerHTML = rows.length ? '<tr><th>Path</th><th>Type</th><th class="num">Size</th><th>Found in</th><th>Sort</th></tr>' + rows.map(r =>
+  $('#results').innerHTML = rows.length ? '<tr><th>Path</th><th>Type</th><th class="num">Size</th><th>Found in</th><th>Does it spark joy?</th></tr>' + rows.map(r =>
     `<tr><td class="path">${hl(r.path)}</td><td><span class="dot" style="background:${kcol(r.kind)}"></span> ${KIND_LABEL[r.kind] || 'Other'}</td><td class="num">${fmt(r.size)}</td><td>${r.how}</td><td>${mkButtons(r.sid, r.path)}</td></tr>`).join('') : '';
 }
 
@@ -682,7 +682,7 @@ function runCmp() {
   const verdict = (name, only, total, other, sid, text) => only.length ? '' :
     `<div class="verdict"><b>All ${nf.format(total.n)} files in ${name} (${fmt(total.s)}) also exist in ${other}.</b> ${name} is redundant: deleting it frees ${fmt(total.s)}. <span class="muted">If it holds a Lightroom catalog or similar, check first that nothing points to this path.</span>
      ${text ? '<div style="margin-top:.5rem">' + mkButtons(sid, text) + '</div>' : ''}</div>`;
-  const table = (title, only, pre, sid) => `<h3>${title}</h3>` + (only.length ? '<table><tr><th>Folder or file</th><th class="num">Files</th><th class="num">Size</th><th>Sort</th></tr>' +
+  const table = (title, only, pre, sid) => `<h3>${title}</h3>` + (only.length ? '<table><tr><th>Folder or file</th><th class="num">Files</th><th class="num">Size</th><th>Does it spark joy?</th></tr>' +
     sub(only, pre).slice(0, 60).map(e => `<tr><td>${esc(e.name)}${e.dir ? '/' : ''}</td><td class="num">${nf.format(e.n)}</td><td class="num">${fmt(e.size)}</td><td>${mkButtons(e.sid, pre + e.name)}</td></tr>`).join('') + '</table>' : '<p class="muted">Nothing.</p>');
   $('#cmp-out').innerHTML =
     `<div class="figures">${fig('Only in A', onlyA.length, sumOf(onlyA))}${fig('In both', both.n, both.s)}${fig('Only in B', onlyB.length, sumOf(onlyB))}</div>
@@ -703,7 +703,7 @@ function renderMarks() {
   const rows = markRows(); let del = 0;
   const html = rows.map(r => { const z = sizeOf(r.sid, r.path); if (r.mark === 'delete') del += z.s;
     return `<tr><td>${esc(r.source)}</td><td class="path">${esc(r.path)}</td><td class="num">${nf.format(z.n)}</td><td class="num">${fmt(z.s)}</td><td>${mkButtons(r.sid, r.path)}</td></tr>`; }).join('');
-  $('#marklist').innerHTML = rows.length ? '<tr><th>Disk</th><th>Path</th><th class="num">Files</th><th class="num">Size</th><th>Sort</th></tr>' + html : '';
+  $('#marklist').innerHTML = rows.length ? '<tr><th>Disk</th><th>Path</th><th class="num">Files</th><th class="num">Size</th><th>Does it spark joy?</th></tr>' + html : '';
   $('#minfo').textContent = rows.length ? `${nf.format(rows.length)} items sorted. Ready to let go: ${fmt(del)}.` : 'Nothing sorted yet. Hold each file or folder and ask: does it spark joy? Choose "keep", "spark joy?" (still deciding) or "let go". Nothing changes on the disk.';
 }
 function download(name, text) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = name; a.click(); }
