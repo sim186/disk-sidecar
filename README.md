@@ -1,5 +1,7 @@
 # Sidecar
 
+*Keep what sparks joy. Thank the rest, and let it go.*
+
 A catalog that lives on each of your external disks. Open it in the browser to see what is on
 the disk, where the space goes, what is duplicated and what you can let go of. The same index is
 a plain SQLite file, so scripts and LLMs can search it too.

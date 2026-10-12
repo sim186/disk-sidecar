@@ -41,6 +41,7 @@ button, input, select { font: inherit; color: inherit; }
 #rail { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--rail); padding: 1.6rem 1.2rem 1.2rem; display: flex; flex-direction: column; gap: 1.8rem; }
 .brand { display: flex; align-items: baseline; gap: .6rem; padding: 0 .4rem; }
 .brand .word { font-size: 1.55rem; font-weight: 700; letter-spacing: -.02em; }
+.tagline { margin: -.15rem .4rem .6rem; font-size: .85rem; color: var(--muted); font-style: italic; line-height: 1.35; }
 .brand .ver { font-size: .8rem; color: var(--muted); }
 #nav { display: flex; flex-direction: column; }
 #nav button { text-align: left; background: none; border: 0; padding: .45rem .7rem; cursor: pointer; border-radius: 2px; display: flex; justify-content: space-between; }
@@ -167,6 +168,7 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
 <div id="app" class="hide">
   <aside id="rail">
     <div class="brand"><span class="word">sidecar</span><span class="ver" id="ver"></span></div>
+    <p class="tagline">Keep what sparks joy. Thank the rest, and let it go.</p>
     <div id="upd" class="hide"><a id="upd-link" target="_blank" rel="noopener"></a> · <button class="btn quiet" id="upd-skip" style="font-size:inherit">skip</button></div>
     <nav id="nav">
       <button data-tab="map" class="on">Map</button>
