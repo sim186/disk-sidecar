@@ -172,6 +172,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case p == "/api/thumb":
+		s.serveThumb(w, r)
 	case p == "/api/job":
 		if !s.authorised(r) {
 			writeJSON(w, 403, map[string]string{"error": "missing token"})

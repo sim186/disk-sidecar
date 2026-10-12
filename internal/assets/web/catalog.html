@@ -38,19 +38,19 @@ button, input, select { font: inherit; color: inherit; }
 
 /* shell: the rail is the "sidecar" */
 #app { display: grid; grid-template-columns: 16.5rem minmax(0, 1fr); min-height: 100vh; }
-#rail { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--rail); padding: 1.6rem 1.2rem 1.2rem; display: flex; flex-direction: column; gap: 1.8rem; }
+#rail { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--rail); padding: 1.4rem 1.2rem 1.2rem; display: flex; flex-direction: column; gap: 1.2rem; }
 .brand { display: flex; align-items: baseline; gap: .6rem; padding: 0 .4rem; }
 .brand .word { font-size: 1.55rem; font-weight: 700; letter-spacing: -.02em; }
-.tagline { margin: -.15rem .4rem .6rem; font-size: .85rem; color: var(--muted); font-style: italic; line-height: 1.35; }
+.tagline { margin: .2rem .4rem 0; font-size: .85rem; color: var(--muted); font-style: italic; line-height: 1.35; }
 .brand .ver { font-size: .8rem; color: var(--muted); }
 #nav { display: flex; flex-direction: column; }
-#nav button { text-align: left; background: none; border: 0; padding: .45rem .7rem; cursor: pointer; border-radius: 2px; display: flex; justify-content: space-between; }
+#nav button { text-align: left; background: none; border: 0; padding: .35rem .7rem; cursor: pointer; border-radius: 2px; display: flex; justify-content: space-between; }
 #nav button:hover { background: var(--hover); }
 #nav button.on { background: var(--ink); color: var(--ground); }
 #nav .n { opacity: .65; }
 #rail h2 { font-size: .85rem; font-weight: 400; color: var(--muted); margin: 0 0 .35rem; padding: 0 .4rem; }
 #disks { list-style: none; margin: 0; padding: 0; }
-#disks button { width: 100%; text-align: left; background: none; border: 0; padding: .5rem .7rem .55rem; cursor: pointer; border-radius: 2px; }
+#disks button { width: 100%; text-align: left; background: none; border: 0; padding: .4rem .7rem .45rem; cursor: pointer; border-radius: 2px; }
 #disks button:hover { background: var(--hover); }
 #disks button.on { background: var(--paper); }
 #disks .name { display: block; font-weight: 700; overflow-wrap: anywhere; }
@@ -97,29 +97,80 @@ input::placeholder { color: var(--muted); }
 .tile.m-delete { box-shadow: inset 0 0 0 4px var(--delete), inset 0 0 0 5px var(--ground); }
 .tile.m-review { box-shadow: inset 0 0 0 4px var(--review), inset 0 0 0 5px var(--ground); }
 
-table { width: 100%; border-collapse: collapse; margin-top: 1.2rem; }
-th { text-align: left; font-weight: 400; color: var(--muted); font-size: .85rem; padding: .3rem 1rem .5rem 0; border-bottom: 2px solid var(--ink); }
-td { padding: .5rem 1rem .5rem 0; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 1.2rem; }
+th { position: sticky; top: 0; z-index: 2; background: var(--ground); text-align: left; font-weight: 700; color: var(--ink); font-size: .85rem; padding: .55rem 1rem .55rem 0; border-bottom: 2px solid var(--ink); white-space: nowrap; }
+td { padding: .7rem 1rem .7rem 0; border-bottom: 1px solid var(--rule); vertical-align: middle; }
 tr:hover td { background: var(--hover); }
 td.num, th.num { text-align: right; white-space: nowrap; }
-td.path { overflow-wrap: anywhere; }
+td.path { overflow-wrap: anywhere; min-width: 18rem; }
+td.path .dir { display: block; color: var(--muted); font-size: .85rem; line-height: 1.3; }
+td.path .base { font-weight: 700; }
+td.name { white-space: nowrap; }
+td.name .dot { margin-right: .55rem; }
+td.share { white-space: nowrap; width: 9rem; }
+.bar { display: inline-block; width: 4.5rem; height: 6px; background: var(--rule); vertical-align: middle; margin-right: .5rem; }
+.bar i { display: block; height: 100%; background: var(--ink); }
+/* a decided row carries its colour on its left edge, so the answer reads without finding the button */
+tr.m-keep td:first-child { box-shadow: inset 4px 0 0 var(--keep); padding-left: .8rem; }
+tr.m-review td:first-child { box-shadow: inset 4px 0 0 var(--review); padding-left: .8rem; }
+tr.m-delete td:first-child { box-shadow: inset 4px 0 0 var(--delete); padding-left: .8rem; }
+tr.m-delete td.name .link, tr.m-delete td.path .base { text-decoration: line-through; text-decoration-thickness: 1px; }
+@media (max-width: 880px) { table { display: block; overflow-x: auto; } }
 .link { cursor: pointer; font-weight: 700; }
 .link:hover { text-decoration: underline; }
 mark { background: transparent; color: inherit; font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; }
 
-/* marks: three words, the chosen one coloured */
-.mk { display: inline-flex; gap: .7rem; white-space: nowrap; }
-.mk button { background: none; border: 0; padding: 0; cursor: pointer; color: var(--muted); font-size: .88rem; }
-.mk button:hover { color: var(--ink); text-decoration: underline; }
-.mk button.on { font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
-.mk button.on[data-m=keep] { color: var(--keep); }
-.mk button.on[data-m=delete] { color: var(--delete); }
-.mk button.on[data-m=review] { color: var(--review); }
+/* map toolbar: how to list, and whether to draw the map */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1.2rem; margin: 0 0 .4rem; }
+.seg { display: inline-flex; border: 1px solid var(--muted); border-radius: 3px; overflow: hidden; }
+.seg button { background: none; border: 0; border-left: 1px solid var(--rule); padding: .28rem 1rem; cursor: pointer; }
+.seg button:first-child { border-left: 0; }
+.seg button:hover { background: var(--hover); }
+.seg button.on { background: var(--ink); color: var(--ground); font-weight: 700; }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { text-decoration: underline; }
+th.sel, td.sel { width: 1%; padding-right: .6rem; }
+input.sel, input.selall, td.sel input, th.sel input { width: 1.05rem; height: 1.05rem; accent-color: var(--ink); cursor: pointer; vertical-align: middle; }
+tr:has(input.sel:checked) td { background: var(--hover); }
+#selbar { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%); z-index: 56; display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1.2rem; background: var(--paper); border: 2px solid var(--ink); padding: .6rem 1rem; max-width: 94vw; }
+#selbar .mk.pick button { width: 4.9rem; }
 
-.group { padding: .9rem 0 1rem; border-top: 2px solid var(--ink); }
-.group h4 { margin: 0 0 .4rem; font-size: 1rem; }
-.group div { overflow-wrap: anywhere; padding: .15rem 0; display: flex; gap: 1rem; }
-.group .mk { flex: none; }
+/* previews: small pictures next to photos, drawn only when they scroll into view */
+td.path .thumb, .group .p .thumb { float: left; margin-top: 1px; }
+.thumb { width: 48px; height: 48px; object-fit: cover; vertical-align: middle; margin-right: .6rem; background: var(--rule); border-radius: 2px; }
+
+/* marks: three words, the chosen one coloured */
+/* the answer is a three-way switch: always the same size, so rows line up; the chosen one is filled */
+.acts { display: inline-flex; align-items: center; gap: .3rem 1.2rem; flex-wrap: wrap; }
+.mk { display: inline-flex; white-space: nowrap; }
+.mk.pick { border: 1px solid var(--muted); border-radius: 3px; overflow: hidden; }
+.mk.pick button { background: none; border: 0; border-left: 1px solid var(--rule); padding: .22rem 0; width: 4.9rem; text-align: center; cursor: pointer; color: var(--ink); font-size: .88rem; }
+.mk.pick button:first-child { border-left: 0; }
+.mk.pick button:hover { background: var(--hover); }
+.mk.pick button.on { font-weight: 700; color: var(--paper); }
+.mk.pick button.on[data-m=keep] { background: var(--keep); }
+.mk.pick button.on[data-m=review] { background: var(--review); }
+.mk.pick button.on[data-m=delete] { background: var(--delete); }
+.mk.pick button:focus-visible { outline-offset: -3px; }
+.mk.more { gap: .9rem; }
+.mk.more button { background: none; border: 0; padding: 0; cursor: pointer; color: var(--muted); font-size: .85rem; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--rule); }
+.mk.more button:hover { color: var(--ink); text-decoration-color: var(--ink); }
+
+.group { padding: .9rem 0 .6rem; border-top: 2px solid var(--ink); }
+.group h4 { margin: 0 0 .3rem; font-size: 1rem; }
+.group h4 .muted { font-weight: 400; }
+.group .f { overflow-wrap: anywhere; padding: .5rem 0; border-top: 1px solid var(--rule); display: flex; gap: .4rem 1.5rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.group .f:first-of-type { border-top: 0; }
+.group .f > .p { flex: 1 1 22rem; min-width: 0; }
+.group .f > .p .dir { display: block; color: var(--muted); font-size: .85rem; line-height: 1.3; }
+.group .f > .p .base { font-weight: 700; }
+.group .acts { flex: none; }
+.group .f > input.sel { flex: none; }
+.group .f:has(input.sel:checked) { background: var(--hover); }
+.group h4 label { font-weight: 400; font-size: .88rem; color: var(--muted); margin-left: .8rem; cursor: pointer; }
+.tally { display: flex; flex-wrap: wrap; gap: .3rem 1.6rem; margin: 0 0 1.2rem; }
+.tally span { display: inline-flex; align-items: center; gap: .45rem; }
+.tally i { width: .65rem; height: .65rem; display: inline-block; }
 .figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 2rem; margin: 1rem 0 .4rem; }
 .figures div { border-top: 2px solid var(--ink); padding-top: .5rem; }
 .figures b { display: block; font-size: 1.6rem; line-height: 1.15; letter-spacing: -.01em; }
@@ -167,8 +218,10 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
 
 <div id="app" class="hide">
   <aside id="rail">
-    <div class="brand"><span class="word">sidecar</span><span class="ver" id="ver"></span></div>
-    <p class="tagline">Keep what sparks joy. Thank the rest, and let it go.</p>
+    <header>
+      <div class="brand"><span class="word">sidecar</span><span class="ver" id="ver"></span></div>
+      <p class="tagline">Keep what sparks joy. Thank the rest, and let it go.</p>
+    </header>
     <div id="upd" class="hide"><a id="upd-link" target="_blank" rel="noopener"></a> · <button class="btn quiet" id="upd-skip" style="font-size:inherit">skip</button></div>
     <nav id="nav">
       <button data-tab="map" class="on">Map</button>
@@ -187,6 +240,7 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
       <button class="btn hide" id="verify-now">Check now</button>
       <button class="btn quiet hide" id="add-disk">Install on a disk…</button>
       <button class="btn quiet hide" id="add-phone">Add a phone…</button>
+      <label class="hide" id="previews-l" style="display:block;margin-top:.6rem"><input type="checkbox" id="previews"> Show previews of photos</label>
     </div>
   </aside>
 
@@ -194,6 +248,10 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
     <section id="tab-map">
       <h1 id="crumbs"></h1>
       <p class="lede" id="mapinfo"></p>
+      <div class="toolbar">
+        <div class="seg" id="viewsw" role="group" aria-label="List"><button data-v="folders">Folders</button><button data-v="files">All files</button></div>
+        <button class="btn quiet" id="maptoggle" aria-expanded="true">Hide map</button>
+      </div>
       <div class="kinds" id="legend"></div>
       <div id="treemap"></div>
       <table id="listing"></table>
@@ -291,6 +349,14 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
       <button class="btn quiet" id="newdisk-never">Never for this disk</button>
     </div>
   </div>
+  <div id="selbar" class="hide" role="region" aria-label="Selected items">
+    <b id="selcount"></b>
+    <span class="mk pick" role="group" aria-label="Answer for all selected">
+      <button data-b="keep">Keep</button><button data-b="review">Not sure</button><button data-b="delete">Let go</button>
+    </span>
+    <button class="btn quiet" id="selundo">Remove answer</button>
+    <button class="btn quiet" id="selclear">Clear selection</button>
+  </div>
   <div id="toast" class="hide" role="status"></div>
 </div>
 
@@ -310,7 +376,9 @@ const theme = new URLSearchParams(location.search).get('theme');
 if (theme === 'dark' || theme === 'light') document.documentElement.dataset.theme = theme;
 const diskParam = new URLSearchParams(location.search).get('disk');   // ?disk=2 opens that disk
 
-let db, sources = [], state = { source: 'all', kind: 'all', prefix: '' };
+let db, sources = [], state = { source: 'all', kind: 'all', prefix: '', view: 'folders', sort: 'size', dir: -1 };
+let mapOpen = true;
+try { mapOpen = localStorage.getItem('sidecar-map') !== 'closed'; if (localStorage.getItem('sidecar-view') === 'files') state.view = 'files'; } catch (e) {}
 
 /* ---------- marks: kept in the index of the disk the file lives on (saved by the server);
    without the server they stay in this browser only ---------- */
@@ -332,6 +400,39 @@ function setMark(sid, p, m) {
     });
   } else { try { localStorage.setItem('sidecar-marks', JSON.stringify(marks)); } catch (e) {} }
 }
+function setMarks(items, m) { // many at once; m null removes the answer
+  const prev = items.map(i => [mkey(i.sid, i.path), marks[mkey(i.sid, i.path)]]);
+  items.forEach(i => { if (m) marks[mkey(i.sid, i.path)] = m; else delete marks[mkey(i.sid, i.path)]; });
+  if (TOKEN && actions) {
+    api('api/marks', { items: items.map(i => ({ source: (sources.find(s => s.id === i.sid) || {}).label, path: i.path, mark: m })) }).catch(e => {
+      prev.forEach(([k, v]) => { if (v) marks[k] = v; else delete marks[k]; });
+      toast('Could not save your choice: ' + e.message); rerenderCurrent();
+    });
+  } else { try { localStorage.setItem('sidecar-marks', JSON.stringify(marks)); } catch (e) {} }
+}
+/* selection: tick rows, then answer for all of them at once */
+let sel = new Map(), selScope = '';
+const selCell = (sid, p) => `<td class="sel"><input type="checkbox" class="sel" data-sid="${sid}" data-p="${esc(p)}" aria-label="Select" ${sel.has(mkey(sid, p)) ? 'checked' : ''}></td>`;
+const selHead = '<th class="sel"><input type="checkbox" class="selall" aria-label="Select all"></th>';
+function scopeTo(scope) { if (scope !== selScope) { selScope = scope; sel.clear(); } updateSelbar(); }
+function updateSelbar() {
+  const n = sel.size; $('#selbar').classList.toggle('hide', !n);
+  $('#selcount').textContent = n + (n === 1 ? ' item selected' : ' items selected');
+}
+document.addEventListener('change', e => {
+  const c = e.target; if (!c.classList) return;
+  if (c.classList.contains('selall')) {
+    c.closest('table, .group').querySelectorAll('input.sel').forEach(x => { x.checked = c.checked; c.checked ? sel.set(mkey(x.dataset.sid, x.dataset.p), { sid: +x.dataset.sid, path: x.dataset.p }) : sel.delete(mkey(x.dataset.sid, x.dataset.p)); });
+    updateSelbar();
+  } else if (c.classList.contains('sel')) {
+    const k = mkey(c.dataset.sid, c.dataset.p);
+    c.checked ? sel.set(k, { sid: +c.dataset.sid, path: c.dataset.p }) : sel.delete(k); updateSelbar();
+  }
+});
+function applySel(m) { const items = [...sel.values()]; setMarks(items, m); sel.clear(); updateSelbar(); rerenderCurrent(); renderRail(); }
+$('#selbar').addEventListener('click', e => { const b = e.target.closest('button[data-b]'); if (b) applySel(b.dataset.b); });
+$('#selundo').onclick = () => applySel(null);
+$('#selclear').onclick = () => { sel.clear(); updateSelbar(); rerenderCurrent(); };
 const currentTab = () => (document.querySelector('#nav button.on') || {}).dataset.tab;
 function rerenderCurrent() { const b = document.querySelector('#nav button.on'); if (b) b.click(); }
 function markOf(sid, p) { // a mark on a folder covers everything inside it
@@ -340,14 +441,19 @@ function markOf(sid, p) { // a mark on a folder covers everything inside it
   return '';
 }
 // Kondo vocabulary: only the words on screen change; stored marks stay keep / delete / review
-const MK = { keep: 'keep', review: 'spark joy?', delete: 'let go' };
+const MK = { keep: 'Keep', review: 'Not sure', delete: 'Let go' };
+const MKCOL = { keep: 'var(--keep)', review: 'var(--review)', delete: 'var(--delete)' };
 const FM = /Mac/i.test(navigator.platform) ? 'Finder' : /Win/i.test(navigator.platform) ? 'Explorer' : 'file manager';
 const isPhone = sid => { const s = sources.find(x => x.id === sid); return !!s && s.kind === 'phone'; };
-const mkButtons = (sid, p) => '<span class="mk">' + Object.keys(MK).map(m =>
-  `<button data-m="${m}" data-sid="${sid}" data-p="${esc(p)}" class="${marks[mkey(sid, p)] === m ? 'on' : ''}">${MK[m]}</button>`).join('') +
-  (actions ? `<button class="cp" data-sid="${sid}" data-p="${esc(p)}" title="Copy to another disk or folder; the original stays">copy to…</button>` : '') +
-  (actions && isPhone(sid) ? `<button class="fr" data-sid="${sid}" data-p="${esc(p)}" title="Thank and release from the phone, only what is proven safe on a disk">let go from phone…</button>` : '') +
-  (actions ? `<button class="rv" data-sid="${sid}" data-p="${esc(p)}" title="Show in ${FM}">show</button>` : '') + '</span>';
+const mkButtons = (sid, p) => '<span class="acts"><span class="mk pick" role="group" aria-label="Your answer">' + Object.keys(MK).map(m =>
+  `<button data-m="${m}" data-sid="${sid}" data-p="${esc(p)}" aria-pressed="${marks[mkey(sid, p)] === m}" class="${marks[mkey(sid, p)] === m ? 'on' : ''}">${MK[m]}</button>`).join('') + '</span>' +
+  (actions ? '<span class="mk more">' +
+    `<button class="cp" data-sid="${sid}" data-p="${esc(p)}" title="Copy to another disk or folder; the original stays">Copy to…</button>` +
+    (isPhone(sid) ? `<button class="fr" data-sid="${sid}" data-p="${esc(p)}" title="Thank and release from the phone, only what is proven safe on a disk">Let go from phone…</button>` : '') +
+    `<button class="rv" data-sid="${sid}" data-p="${esc(p)}" title="Show in ${FM}">Show in ${FM}</button></span>` : '') + '</span>';
+// a path as two lines: the folder it lives in, quiet; the name, bold
+const pathCell = (p, hl = esc) => { const i = p.lastIndexOf('/'); return (i > 0 ? `<span class="dir">${hl(p.slice(0, i + 1))}</span>` : '') + `<span class="base">${hl(p.slice(i + 1))}</span>`; };
+const rowCls = (sid, p) => { const m = markOf(sid, p); return m ? ` class="m-${m}"` : ''; };
 
 /* ---------- db helpers ---------- */
 function q(sql, params = []) {
@@ -361,6 +467,19 @@ function where(withKind = true) {
   if (withKind && state.kind !== 'all') { w.push('kind = ?'); p.push(state.kind); }
   return [w.length ? ' AND ' + w.join(' AND ') : '', p];
 }
+
+// Previews: photos on a disk plugged in, drawn small and only when scrolled into view. Phones are
+// never read for this. The choice is remembered by this browser only.
+const THUMB_EXT = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tif', 'tiff']);
+let previews = true;
+try { previews = localStorage.getItem('sidecar-previews') !== 'off'; } catch (e) {}
+function thumb(sid, p) {
+  if (!previews || !actions) return '';
+  const s = sources.find(x => x.id === sid);
+  if (!s || s.kind !== 'disk' || !THUMB_EXT.has(p.slice(p.lastIndexOf('.') + 1).toLowerCase())) return '';
+  return `<img class="thumb" loading="lazy" decoding="async" alt="" src="api/thumb?${new URLSearchParams({ source: s.label, path: p, t: TOKEN })}">`;
+}
+document.addEventListener('error', e => { if (e.target.classList && e.target.classList.contains('thumb')) e.target.remove(); }, true);
 
 /* ---------- local server (only when the page is served by serve.py) ---------- */
 const TOKEN = (document.querySelector('meta[name=sidecar-token]') || {}).content || '';
@@ -399,6 +518,8 @@ async function refreshActions() {
   $('#verify-now').classList.toggle('hide', !actions);
   $('#add-disk').classList.toggle('hide', !actions);
   $('#add-phone').classList.toggle('hide', !actions);
+  $('#previews-l').classList.toggle('hide', !actions);
+  $('#previews').checked = previews;
   $('#do-quar').classList.toggle('hide', !actions);
   $('#do-copy').classList.toggle('hide', !actions);
   if (actions) {
@@ -408,6 +529,11 @@ async function refreshActions() {
     if (quarState.startup_job && quarState.startup_job !== watchedJob) { watchedJob = quarState.startup_job; watchVerify(watchedJob); }
   }
 }
+$('#previews').onchange = e => {
+  previews = e.target.checked;
+  try { localStorage.setItem('sidecar-previews', previews ? 'on' : 'off'); } catch (e) {}
+  const b = document.querySelector('#nav button.on'); if (b) b.click();
+};
 async function reloadDb(tab) {
   const r = await fetch('index.db', { cache: 'no-store' });
   open(new Uint8Array(await r.arrayBuffer()), true);
@@ -468,7 +594,7 @@ function open(bytes, fromReload) {
   renderRail();
   renderMap();
   if (fromReload) return;
-  refreshActions().then(() => { const t = location.hash.slice(1); if (t) { const b = document.querySelector(`#nav button[data-tab="${t}"]`); if (b) b.click(); } });
+  refreshActions().then(() => { const t = location.hash.slice(1); const b = t && document.querySelector(`#nav button[data-tab="${t}"]`); if (b) b.click(); else rerenderCurrent(); });
 }
 $('#pick').onchange = async e => { const f = e.target.files[0]; if (f) open(new Uint8Array(await f.arrayBuffer())); };
 const dz = $('#drop');
@@ -541,7 +667,26 @@ function sourceRows() { // with several disks, the first level is the disk itsel
     .map(r => ({ ...r, name: (sources.find(s => s.id === r.sid) || {}).label || '?', isdir: 1,
       kind: (q(`SELECT kind FROM files WHERE source_id = ? ${kw} GROUP BY kind ORDER BY SUM(size) DESC LIMIT 1`, [r.sid, ...kp])[0] || {}).kind }));
 }
+function fileListHtml(bySource) {
+  const [w, p] = where(), pre = prefixOf(), multi = sources.length > 1;
+  const col = { name: 'name COLLATE NOCASE', size: 'size', mtime: 'mtime' }[state.sort] || 'size';
+  const rows = q(`SELECT source_id sid, path, size, mtime, kind FROM files WHERE substr(path,1,?) = ? ${w} ORDER BY ${col} ${state.dir > 0 ? 'ASC' : 'DESC'}, path LIMIT 300`, [pre.length, pre, ...p]);
+  if (!rows.length) return '<tr><td class="muted">Nothing to show with these filters.</td></tr>';
+  const th = (k, label, cls = '') => `<th class="sortable ${cls}" data-sort="${k}" aria-sort="${state.sort === k ? (state.dir > 0 ? 'ascending' : 'descending') : 'none'}">${label}${state.sort === k ? (state.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
+  return '<tr>' + selHead + th('name', 'File') + '<th>Type</th>' + th('size', 'Size', 'num') + th('mtime', 'Modified') + '<th>Does it spark joy?</th></tr>' +
+    rows.map(r => `<tr${rowCls(r.sid, r.path)}>${selCell(r.sid, r.path)}<td class="path">${thumb(r.sid, r.path)}${pathCell(r.path)}${multi && state.source === 'all' ? `<span class="dir">on ${esc((sources.find(s => s.id === r.sid) || {}).label || '')}</span>` : ''}</td><td><span class="dot" style="background:${kcol(r.kind)}"></span> ${KIND_LABEL[r.kind] || 'Other'}</td><td class="num">${fmt(r.size)}</td><td class="muted" style="white-space:nowrap">${new Date(r.mtime * 1000).toLocaleDateString()}</td><td>${mkButtons(r.sid, r.path)}</td></tr>`).join('');
+}
+$('#viewsw').onclick = e => { const b = e.target.closest('button[data-v]'); if (!b) return; state.view = b.dataset.v; try { localStorage.setItem('sidecar-view', state.view); } catch (x) {} renderMap(); };
+$('#maptoggle').onclick = () => { mapOpen = !mapOpen; try { localStorage.setItem('sidecar-map', mapOpen ? 'open' : 'closed'); } catch (x) {} renderMap(); };
+$('#listing').onclick = e => {
+  const h = e.target.closest('th[data-sort]'); if (!h) return;
+  if (state.sort === h.dataset.sort) state.dir = -state.dir; else { state.sort = h.dataset.sort; state.dir = state.sort === 'name' ? 1 : -1; }
+  renderMap();
+};
 function renderMap() {
+  scopeTo(['map', state.source, state.prefix, state.view, state.kind].join('|'));
+  $('#viewsw').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === state.view));
+  $('#maptoggle').textContent = mapOpen ? 'Hide map' : 'Show map'; $('#maptoggle').setAttribute('aria-expanded', mapOpen);
   const bySource = state.source === 'all' && !state.prefix && sources.length > 1;
   const kids = bySource ? sourceRows() : children();
   const parts = state.prefix ? state.prefix.split('/') : [];
@@ -555,25 +700,28 @@ function renderMap() {
   $('#legend').innerHTML = `<button data-k="all" class="${state.kind === 'all' ? 'on' : ''}"><span class="t">All</span></button>` +
     KINDS.filter(k => kt[k]).map(k => `<button data-k="${k}" class="${state.kind === k ? 'on' : ''}"><i style="background:${kcol(k)}"></i><span class="t">${KIND_LABEL[k]}</span><span class="sz">${fmt(kt[k])}</span></button>`).join('');
   $('#legend').querySelectorAll('[data-k]').forEach(b => b.onclick = () => { state.kind = b.dataset.k; renderMap(); });
-  const tm = $('#treemap'); const W = tm.clientWidth, H = tm.clientHeight;
-  const tiles = squarify(kids.filter(k => k.size > 0).slice(0, 60).map(k => ({ ...k, v: k.size })), 0, 0, W, H).filter(t => t.w >= 3 && t.h >= 3);
+  const tm = $('#treemap'); tm.classList.toggle('hide', !mapOpen);
+  const W = tm.clientWidth, H = tm.clientHeight;
+  const tiles = !mapOpen ? [] : squarify(kids.filter(k => k.size > 0).slice(0, 60).map(k => ({ ...k, v: k.size })), 0, 0, W, H).filter(t => t.w >= 3 && t.h >= 3);
   tm.innerHTML = kids.length ? tiles.map(t => {
     const kind = bySource ? t.kind : t.isdir ? dominantKind(t.name) : t.kind;
     const m = bySource ? '' : markOf(t.sid, prefixOf() + t.name);
     return `<div class="tile ${t.isdir ? 'dir' : ''} ${m ? 'm-' + m : ''}" data-name="${esc(t.name)}" data-dir="${t.isdir}" title="${esc(t.name)}: ${fmt(t.size)}, ${nf.format(t.n)} files"
       style="left:${t.x}px;top:${t.y}px;width:${t.w}px;height:${t.h}px;background:${kcol(kind)}">${t.w > 70 && t.h > 36 ? `<b>${esc(t.name)}${t.isdir && !bySource ? '/' : ''}</b>${fmt(t.size)}` : ''}</div>`;
   }).join('') : '';
-  tm.classList.toggle('hide', !kids.length);
+  tm.classList.toggle('hide', !kids.length || !mapOpen);
   tm.querySelectorAll('.tile.dir').forEach(el => el.onclick = () => {
     if (bySource) { state.source = String(kids.find(k => k.name === el.dataset.name).sid); state.prefix = ''; renderRail(); }
     else state.prefix = prefixOf() + el.dataset.name;
     renderMap();
   });
-  $('#listing').innerHTML = kids.length ? '<tr><th>Name</th><th class="num">Files</th><th class="num">Size</th><th class="num">Share</th><th>Does it spark joy?</th></tr>' +
-    kids.slice(0, 200).map(k => {
-      const full = prefixOf() + k.name;
-      return `<tr><td>${k.isdir ? `<span class="link" ${bySource ? `data-src-go="${k.sid}"` : `data-go="${esc(full)}"`}>${esc(k.name)}${bySource ? '' : '/'}</span>` : esc(k.name)}</td><td class="num">${nf.format(k.n)}</td><td class="num">${fmt(k.size)}</td><td class="num">${total ? (k.size / total * 100).toLocaleString(undefined, { maximumFractionDigits: 1 }) : 0}%</td><td>${bySource ? '' : mkButtons(k.sid, full)}</td></tr>`;
+  $('#listing').innerHTML = state.view === 'files' ? fileListHtml(bySource) : kids.length ? '<tr>' + (bySource ? '' : selHead) + '<th>Name</th><th class="num">Files</th><th class="num">Size</th><th>Share of this view</th><th>Does it spark joy?</th></tr>' +
+    kids.slice(0, 200).map((k, ix) => {
+      const full = prefixOf() + k.name, pct = total ? k.size / total * 100 : 0;
+      const dot = ix < 60 ? `<span class="dot" style="background:${kcol(bySource ? k.kind : k.isdir ? dominantKind(k.name) : k.kind)}"></span>` : '<span class="dot" style="background:transparent"></span>';
+      return `<tr${bySource ? '' : rowCls(k.sid, full)}>${bySource ? '' : selCell(k.sid, full)}<td class="name">${dot}${!k.isdir ? thumb(k.sid, full) : ''}${k.isdir ? `<span class="link" ${bySource ? `data-src-go="${k.sid}"` : `data-go="${esc(full)}"`}>${esc(k.name)}${bySource ? '' : '/'}</span>` : esc(k.name)}</td><td class="num">${nf.format(k.n)}</td><td class="num">${fmt(k.size)}</td><td class="share"><span class="bar"><i style="width:${Math.max(2, Math.round(pct))}%"></i></span>${pct.toLocaleString(undefined, { maximumFractionDigits: 1 })}%</td><td>${bySource ? '' : mkButtons(k.sid, full)}</td></tr>`;
     }).join('') : '<tr><td class="muted">Nothing to show with these filters.</td></tr>';
+  if (state.view === 'files') $('#mapinfo').textContent += ' Listing up to 300 files below, sorted by ' + ({ name: 'name', size: 'size', mtime: 'date' }[state.sort]) + '.';
   $('#listing').querySelectorAll('[data-go]').forEach(a => a.onclick = () => { state.prefix = a.dataset.go; renderMap(); });
   $('#listing').querySelectorAll('[data-src-go]').forEach(a => a.onclick = () => { state.source = a.dataset.srcGo; state.prefix = ''; renderRail(); renderMap(); });
 }
@@ -609,16 +757,18 @@ async function runSearch() {
     } else { note = ' To search inside files, start Sidecar with open-sidecar.'; }
   }
   if (seq !== searchSeq) return;       // a newer search has started
+  scopeTo(['search', term, scope, kind, state.source].join('|'));
   const seen = new Set(); rows = rows.filter(r => { const k = r.sid + '|' + r.path; return seen.has(k) ? false : seen.add(k); });
   $('#sinfo').textContent = (rows.length ? `${nf.format(rows.length)} results${rows.length >= 150 ? ', showing the first 150' : ''}.` : 'No results.') + note;
   const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/&/g, '&amp;'), 'ig');
   const hl = s => esc(s).replace(re, m => `<mark>${m}</mark>`);
-  $('#results').innerHTML = rows.length ? '<tr><th>Path</th><th>Type</th><th class="num">Size</th><th>Found in</th><th>Does it spark joy?</th></tr>' + rows.map(r =>
-    `<tr><td class="path">${hl(r.path)}</td><td><span class="dot" style="background:${kcol(r.kind)}"></span> ${KIND_LABEL[r.kind] || 'Other'}</td><td class="num">${fmt(r.size)}</td><td>${r.how}</td><td>${mkButtons(r.sid, r.path)}</td></tr>`).join('') : '';
+  $('#results').innerHTML = rows.length ? '<tr>' + selHead + '<th>File</th><th>Type</th><th class="num">Size</th><th>Matched</th><th>Does it spark joy?</th></tr>' + rows.map(r =>
+    `<tr${rowCls(r.sid, r.path)}>${selCell(r.sid, r.path)}<td class="path">${thumb(r.sid, r.path)}${pathCell(r.path, hl)}</td><td><span class="dot" style="background:${kcol(r.kind)}"></span> ${KIND_LABEL[r.kind] || 'Other'}</td><td class="num">${fmt(r.size)}</td><td class="muted">${r.how === 'name' ? 'its name' : 'text inside'}</td><td>${mkButtons(r.sid, r.path)}</td></tr>`).join('') : '';
 }
 
 /* ---------- duplicates ---------- */
 function renderDups() {
+  scopeTo('dups|' + state.source);
   const hasHash = q('SELECT COUNT(*) n FROM files WHERE sha256 IS NOT NULL')[0].n > 0;
   const minSize = 1024 * 1024;
   const only = state.source === 'all' ? '' : ' AND %K IN (SELECT %K FROM files WHERE source_id = ' + (+state.source) + ')';
@@ -636,8 +786,8 @@ function renderDups() {
   $('#dgroups').innerHTML = groups.map(g => {
     const files = hasHash ? q('SELECT source_id sid, path, size FROM files WHERE sha256 = ? ORDER BY path', [g.k])
       : q('SELECT source_id sid, path, size FROM files WHERE name || \'|\' || size = ? ORDER BY path', [g.k]);
-    return `<div class="group"><h4>${g.n} copies of ${fmt(g.size)}, ${fmt(g.size * (g.n - 1))} extra</h4>` +
-      files.map(f => `<div>${mkButtons(f.sid, f.path)}<span>${esc(f.path)} <span class="muted">${esc((sources.find(s => s.id === f.sid) || {}).label || '')}</span></span></div>`).join('') + '</div>';
+    return `<div class="group"><h4>${g.n} copies of ${fmt(g.size)} <span class="muted">${fmt(g.size * (g.n - 1))} could be freed</span><label><input type="checkbox" class="selall"> select all ${g.n}</label></h4>` +
+      files.map(f => `<div class="f${markOf(f.sid, f.path) ? ' m-' + markOf(f.sid, f.path) : ''}"><input type="checkbox" class="sel" data-sid="${f.sid}" data-p="${esc(f.path)}" aria-label="Select ${esc(f.path)}" ${sel.has(mkey(f.sid, f.path)) ? 'checked' : ''}><span class="p">${thumb(f.sid, f.path)}${pathCell(f.path)}<span class="dir">on ${esc((sources.find(s => s.id === f.sid) || {}).label || '')}</span></span>${mkButtons(f.sid, f.path)}</div>`).join('') + '</div>';
   }).join('');
 }
 
@@ -685,7 +835,7 @@ function runCmp() {
     `<div class="verdict"><b>All ${nf.format(total.n)} files in ${name} (${fmt(total.s)}) also exist in ${other}.</b> ${name} is redundant: deleting it frees ${fmt(total.s)}. <span class="muted">If it holds a Lightroom catalog or similar, check first that nothing points to this path.</span>
      ${text ? '<div style="margin-top:.5rem">' + mkButtons(sid, text) + '</div>' : ''}</div>`;
   const table = (title, only, pre, sid) => `<h3>${title}</h3>` + (only.length ? '<table><tr><th>Folder or file</th><th class="num">Files</th><th class="num">Size</th><th>Does it spark joy?</th></tr>' +
-    sub(only, pre).slice(0, 60).map(e => `<tr><td>${esc(e.name)}${e.dir ? '/' : ''}</td><td class="num">${nf.format(e.n)}</td><td class="num">${fmt(e.size)}</td><td>${mkButtons(e.sid, pre + e.name)}</td></tr>`).join('') + '</table>' : '<p class="muted">Nothing.</p>');
+    sub(only, pre).slice(0, 60).map(e => `<tr${rowCls(e.sid, pre + e.name)}><td class="name">${esc(e.name)}${e.dir ? '/' : ''}</td><td class="num">${nf.format(e.n)}</td><td class="num">${fmt(e.size)}</td><td>${mkButtons(e.sid, pre + e.name)}</td></tr>`).join('') + '</table>' : '<p class="muted">Nothing.</p>');
   $('#cmp-out').innerHTML =
     `<div class="figures">${fig('Only in A', onlyA.length, sumOf(onlyA))}${fig('In both', both.n, both.s)}${fig('Only in B', onlyB.length, sumOf(onlyB))}</div>
      <p class="muted">A has ${nf.format(A.n)} files (${fmt(A.s)}), B has ${nf.format(B.n)} (${fmt(B.s)}).</p>` +
@@ -704,13 +854,15 @@ function sizeOf(sid, p) {
 function renderMarks() {
   const rows = markRows(); let del = 0;
   const html = rows.map(r => { const z = sizeOf(r.sid, r.path); if (r.mark === 'delete') del += z.s;
-    return `<tr><td>${esc(r.source)}</td><td class="path">${esc(r.path)}</td><td class="num">${nf.format(z.n)}</td><td class="num">${fmt(z.s)}</td><td>${mkButtons(r.sid, r.path)}</td></tr>`; }).join('');
-  $('#marklist').innerHTML = rows.length ? '<tr><th>Disk</th><th>Path</th><th class="num">Files</th><th class="num">Size</th><th>Does it spark joy?</th></tr>' + html : '';
-  $('#minfo').textContent = rows.length ? `${nf.format(rows.length)} items sorted. Ready to let go: ${fmt(del)}.` : 'Nothing sorted yet. Hold each file or folder and ask: does it spark joy? Choose "keep", "spark joy?" (still deciding) or "let go". Nothing changes on the disk.';
+    return `<tr${rowCls(r.sid, r.path)}><td class="path">${thumb(r.sid, r.path)}${pathCell(r.path)}</td><td>${esc(r.source)}</td><td class="num">${nf.format(z.n)}</td><td class="num">${fmt(z.s)}</td><td>${mkButtons(r.sid, r.path)}</td></tr>`; }).join('');
+  $('#marklist').innerHTML = rows.length ? '<tr><th>Item</th><th>Disk</th><th class="num">Files</th><th class="num">Size</th><th>Does it spark joy?</th></tr>' + html : '';
+  const cnt = m => rows.filter(r => r.mark === m).length;
+  $('#minfo').innerHTML = rows.length ? `<span class="tally">${Object.keys(MK).map(m => `<span><i style="background:${MKCOL[m]}"></i>${MK[m]} <b>${nf.format(cnt(m))}</b>${m === 'delete' ? ' (' + fmt(del) + ')' : ''}</span>`).join('')}</span>`
+    : 'Nothing sorted yet. Hold each file or folder and ask: does it spark joy? Answer Keep, Not sure (still deciding) or Let go. Nothing changes on the disk.';
 }
 function download(name, text) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = name; a.click(); }
 $('#exp-csv').onclick = () => download('sidecar-marks.csv', 'disk,path,mark\n' + markRows().map(r => [r.source, r.path, r.mark].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n'));
-$('#exp-sh').onclick = () => download('sidecar-delete-list.txt', '# Paths in the "let go" pile, relative to the disk root. Check before using them.\n' + markRows().filter(r => r.mark === 'delete').map(r => r.source + '\t' + r.path).join('\n'));
+$('#exp-sh').onclick = () => download('sidecar-delete-list.txt', '# Paths in the Let go pile, relative to the disk root. Check before using them.\n' + markRows().filter(r => r.mark === 'delete').map(r => r.source + '\t' + r.path).join('\n'));
 $('#clear-marks').onclick = async () => {
   if (!confirm('Start over and put everything back in one pile?')) return;
   if (TOKEN && actions) {
@@ -724,7 +876,7 @@ $('#clear-marks').onclick = async () => {
 /* ---------- quarantine ---------- */
 $('#do-quar').onclick = async () => {
   const del = markRows().filter(r => r.mark === 'delete');
-  if (!del.length) return toast('Nothing in the "let go" pile yet.');
+  if (!del.length) return toast('Nothing marked Let go yet.');
   const size = del.reduce((s, r) => s + sizeOf(r.sid, r.path).s, 0);
   if (!confirm(`Thank ${del.length} item${del.length === 1 ? '' : 's'} (${fmt(size)}) for their service and move ${del.length === 1 ? 'it' : 'them'} to the farewell box?\n\nNothing is deleted yet: you can bring ${del.length === 1 ? 'it' : 'them'} back from the Farewell box tab.`)) return;
   try {
@@ -738,8 +890,8 @@ function renderQuar() {
   const items = quarState.quarantine, tot = items.reduce((s, m) => s + m.size, 0);
   $('#qinfo').textContent = items.length ? `${nf.format(items.length)} items waiting to be released, ${fmt(tot)}.` : 'The farewell box is empty. A tidy space.';
   $('#q-empty').classList.toggle('hide', !items.length);
-  $('#quarlist').innerHTML = items.length ? '<tr><th>Moved</th><th>Disk</th><th>Original path</th><th class="num">Files</th><th class="num">Size</th><th></th></tr>' +
-    items.map(m => `<tr><td>${new Date(m.moved_at * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td><td>${esc(m.source)}</td><td class="path">${esc(m.path)}${m.is_dir ? '/' : ''}</td><td class="num">${nf.format(m.files)}</td><td class="num">${fmt(m.size)}</td><td><button class="btn quiet" data-restore="${m.id}">Bring back</button></td></tr>`).join('') : '';
+  $('#quarlist').innerHTML = items.length ? '<tr><th>Moved</th><th>Disk</th><th>Was at</th><th class="num">Files</th><th class="num">Size</th><th></th></tr>' +
+    items.map(m => `<tr><td>${new Date(m.moved_at * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td><td>${esc(m.source)}</td><td class="path">${pathCell(m.path + (m.is_dir ? '/' : ''))}</td><td class="num">${nf.format(m.files)}</td><td class="num">${fmt(m.size)}</td><td><button class="btn quiet" data-restore="${m.id}">Bring back</button></td></tr>`).join('') : '';
   $('#quarlist').querySelectorAll('[data-restore]').forEach(b => b.onclick = async () => {
     try { const r = await api('api/restore', { id: b.dataset.restore }); toast('Welcomed back: ' + r.restored + '. ' + r.note); await reloadDb('quar'); }
     catch (e) { alert('Not brought back:\n\n' + e.message); }
@@ -755,7 +907,7 @@ $('#q-empty').onclick = async () => {
 
 /* mark buttons, everywhere */
 document.addEventListener('click', e => {
-  const b = e.target.closest('.mk button'); if (!b) return;
+  const b = e.target.closest('.mk button'); if (!b || b.dataset.b) return; // data-b: the selection bar's own buttons
   if (b.classList.contains('rv')) {
     const s = sources.find(x => x.id === +b.dataset.sid);
     api('api/reveal', { source: s ? s.label : '', path: b.dataset.p }).catch(err => toast(err.message));
@@ -817,7 +969,7 @@ $('#copyto-disk').onchange = copyFolders;
 $('#copyto-close').onclick = () => $('#copyto').classList.add('hide');
 $('#do-copy').onclick = () => {
   const keep = markRows().filter(r => r.mark === 'keep');
-  if (!keep.length) return toast('Nothing in the "keep" pile yet.');
+  if (!keep.length) return toast('Nothing marked Keep yet.');
   openCopy(keep.map(r => ({ source: r.source, path: r.path })));
 };
 $('#copyto-go').onclick = async () => {

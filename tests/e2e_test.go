@@ -7,10 +7,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -516,6 +520,41 @@ func TestServerSearchesInsideFilesAndKeepsThePageIndexLean(t *testing.T) {
 	if count(t, s.index(), "select count(*) from sqlite_master where name='file_text'") != 0 {
 		t.Fatal("the page's index must not carry the extracted text")
 	}
+}
+
+func TestServerDrawsPreviewsOfPhotosOnDisks(t *testing.T) {
+	s := newServer(t)
+	s.waitStartup()
+	img := image.NewRGBA(image.Rect(0, 0, 600, 300))
+	var buf bytes.Buffer
+	png.Encode(&buf, img)
+	write(t, s.A+"/pics/p.png", buf.String())
+	get := func(q string) (int, string, []byte) {
+		r, err := http.Get(s.base + "/api/thumb?" + q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Body.Close()
+		b, _ := io.ReadAll(r.Body)
+		return r.StatusCode, r.Header.Get("Content-Type"), b
+	}
+	ok := url.Values{"source": {"Disk A"}, "path": {"pics/p.png"}, "t": {s.token}}
+	code, ct, b := get(ok.Encode())
+	cfg, err := jpeg.DecodeConfig(bytes.NewReader(b))
+	if code != 200 || ct != "image/jpeg" || err != nil || cfg.Width != 128 || cfg.Height != 64 {
+		t.Fatalf("preview: %d %s %v %+v", code, ct, err, cfg)
+	}
+	bad := func(what string, v url.Values, want int) {
+		t.Helper()
+		if c, _, _ := get(v.Encode()); c != want {
+			t.Errorf("%s: %d, want %d", what, c, want)
+		}
+	}
+	noTok := url.Values{"source": {"Disk A"}, "path": {"pics/p.png"}}
+	bad("without token", noTok, 403)
+	bad("not a picture", url.Values{"source": {"Disk A"}, "path": {"foto/onlyA.bin"}, "t": {s.token}}, 404)
+	bad("outside the disk", url.Values{"source": {"Disk A"}, "path": {"../DiskB/backup/onlyB.bin"}, "t": {s.token}}, 404)
+	bad("unknown disk", url.Values{"source": {"Nope"}, "path": {"pics/p.png"}, "t": {s.token}}, 404)
 }
 
 func TestServerSecurityRules(t *testing.T) {

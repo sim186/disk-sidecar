@@ -4,6 +4,19 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
+## Unreleased
+
+- Map: switch between **Folders** and **All files** (a flat list of the largest files, sortable by name, size or
+  date), and hide the map with **Hide map** (remembered). Rows can be ticked, and a bar answers Keep, Not sure or
+  Let go for all ticked rows at once, in the Map, Search and Duplicates. Photos on a disk also show previews on the Map.
+- Tables: the answer is a fixed three-way switch (Keep, Not sure, Let go) with the chosen one filled and a coloured
+  edge on the row; paths show the folder quietly above the file name; Share has a bar; the side bar is tighter.
+- Fixed: previews and the Copy to / Show links only appeared after the first click, not on the first draw.
+- Previews. Photos (jpg, png, gif, webp, bmp, tiff) on a disk that is plugged in show a small picture next to their
+  name in Search, Duplicates and Tidying piles. They are drawn only when scrolled into view, a JPEG's own embedded
+  thumbnail is used when it has one, at most three are made at a time, and results are cached in the user's cache
+  folder. Phones are never read for previews. **Show previews of photos** in the side bar turns them off.
+
 ## 0.7.0
 
 - The word that confirms releasing the farewell box for good is now `let it go` (was `DELETE`), in the app and in
