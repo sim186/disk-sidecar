@@ -52,6 +52,15 @@ type Options struct {
 	Text                  bool  // extract text for the full-text search
 	Progress              func(seen int)
 	Log                   io.Writer // nil = silent
+	// Entries, when set, lists the files instead of walking Root: for a source that is not a folder
+	// on this computer (a phone read through adb). Nothing is hashed or read for text then.
+	Entries func(yield func(Entry) error) error
+}
+
+// Entry is one file reported by Options.Entries; Path is relative, with forward slashes.
+type Entry struct {
+	Path        string
+	Size, Mtime int64
 }
 
 // Stats is what a scan found.
@@ -108,12 +117,15 @@ func SHA256(path string) (string, error) {
 func Run(o Options) (Stats, error) {
 	t0 := time.Now()
 	var st Stats
-	root, err := filepath.Abs(o.Root)
-	if err != nil {
-		return st, err
-	}
-	if info, err := os.Stat(root); err != nil || !info.IsDir() {
-		return st, fmt.Errorf("not a folder: %s", o.Root)
+	root := o.Root
+	if o.Entries == nil {
+		var err error
+		if root, err = filepath.Abs(o.Root); err != nil {
+			return st, err
+		}
+		if info, err := os.Stat(root); err != nil || !info.IsDir() {
+			return st, fmt.Errorf("not a folder: %s", o.Root)
+		}
 	}
 	db, err := idx.Open(o.DB)
 	if err != nil {
@@ -132,7 +144,7 @@ func Run(o Options) (Stats, error) {
 		return st, err
 	}
 
-	homeMode := isHome(root) // the user's home folder: leave out the folders where programs keep their data
+	homeMode := o.Entries == nil && isHome(root) // the user's home folder: leave out the folders where programs keep their data
 	type fsig struct{ size, mtime int64 }
 	known := map[string]fsig{}
 	rows, err := db.Query(`SELECT path, size, mtime FROM files WHERE source_id=?`, sid)
@@ -167,48 +179,12 @@ func Run(o Options) (Stats, error) {
 		}
 	}
 
-	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			st.Errors++
-			logf("read error %s: %v", path, err)
-			if d != nil && d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
+	// process records one file; local is where it can be read on this computer ("" = it cannot).
+	process := func(rel string, size, mtime int64, local string) error {
+		name := rel
+		if i := strings.LastIndex(rel, "/"); i >= 0 {
+			name = rel[i+1:]
 		}
-		name := d.Name()
-		if d.IsDir() {
-			if path != root && idx.SkipDirs[name] {
-				return fs.SkipDir
-			}
-			if homeMode && filepath.Dir(path) == root && (name == "Library" || name == "AppData" || strings.HasPrefix(name, ".")) {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if idx.SkipFile(name) {
-			return nil
-		}
-		var info fs.FileInfo
-		if d.Type()&fs.ModeSymlink != 0 { // like a normal stat: follow links to files, ignore links to folders
-			info, err = os.Stat(path)
-		} else {
-			info, err = d.Info()
-		}
-		if err != nil {
-			st.Errors++
-			logf("stat error %s: %v", path, err)
-			return nil
-		}
-		if info.IsDir() || !info.Mode().IsRegular() {
-			return nil
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return nil
-		}
-		rel = filepath.ToSlash(rel)
-		size, mtime := info.Size(), info.ModTime().Unix()
 		seen[rel] = struct{}{}
 		count++
 		if o.Progress != nil && count%500 == 0 {
@@ -238,8 +214,8 @@ func Run(o Options) (Stats, error) {
 			ext = strings.ToLower(name[i+1:])
 		}
 		var sum sql.NullString
-		if o.HashMin >= 0 && size >= o.HashMin {
-			if h, err := SHA256(path); err == nil {
+		if local != "" && o.HashMin >= 0 && size >= o.HashMin {
+			if h, err := SHA256(local); err == nil {
 				sum = sql.NullString{String: h, Valid: true}
 			} else {
 				st.Errors++
@@ -259,8 +235,8 @@ func Run(o Options) (Stats, error) {
 		} else {
 			st.New++
 		}
-		if o.Text && textAllowed(rel) {
-			if body := ReadText(path, ext); body != "" {
+		if local != "" && o.Text && textAllowed(rel) {
+			if body := ReadText(local, ext); body != "" {
 				if _, err := tx.Exec(`DELETE FROM file_text WHERE rowid=?`, id); err != nil {
 					return err
 				}
@@ -270,7 +246,60 @@ func Run(o Options) (Stats, error) {
 			}
 		}
 		return nil
-	})
+	}
+
+	var walkErr error
+	if o.Entries != nil {
+		walkErr = o.Entries(func(e Entry) error {
+			if e.Path == "" || idx.SkipFile(e.Path[strings.LastIndex(e.Path, "/")+1:]) {
+				return nil
+			}
+			return process(e.Path, e.Size, e.Mtime, "")
+		})
+	} else {
+		walkErr = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				st.Errors++
+				logf("read error %s: %v", path, err)
+				if d != nil && d.IsDir() {
+					return fs.SkipDir
+				}
+				return nil
+			}
+			name := d.Name()
+			if d.IsDir() {
+				if path != root && idx.SkipDirs[name] {
+					return fs.SkipDir
+				}
+				if homeMode && filepath.Dir(path) == root && (name == "Library" || name == "AppData" || strings.HasPrefix(name, ".")) {
+					return fs.SkipDir
+				}
+				return nil
+			}
+			if idx.SkipFile(name) {
+				return nil
+			}
+			var info fs.FileInfo
+			if d.Type()&fs.ModeSymlink != 0 { // like a normal stat: follow links to files, ignore links to folders
+				info, err = os.Stat(path)
+			} else {
+				info, err = d.Info()
+			}
+			if err != nil {
+				st.Errors++
+				logf("stat error %s: %v", path, err)
+				return nil
+			}
+			if info.IsDir() || !info.Mode().IsRegular() {
+				return nil
+			}
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				return nil
+			}
+			return process(filepath.ToSlash(rel), info.Size(), info.ModTime().Unix(), path)
+		})
+	}
 	if walkErr != nil {
 		tx.Rollback()
 		return st, walkErr

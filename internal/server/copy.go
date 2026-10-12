@@ -61,7 +61,7 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 		return nil, refuse("unknown disk: %s", req.To.Source)
 	}
 	if dst.Kind != "disk" {
-		return nil, refuse("%s is a read-only snapshot: nothing can be copied into it", dst.Label)
+		return nil, refuse("%s is %s: nothing can be copied into it", dst.Label, readOnlyWhat(dst.Kind))
 	}
 	if !dirExists(dst.Root) {
 		return nil, refuse("%s: the disk is not reachable from this computer (%s)", dst.Label, dst.Root)

@@ -107,8 +107,8 @@ func (s *Server) doMarks(items []markItem) (any, error) {
 		if src == nil {
 			return nil, refuse("unknown source: %s", it.Source)
 		}
-		if src.Kind != "disk" {
-			return nil, refuse("%s is a read-only snapshot: marks must be set from its own computer", src.Label)
+		if src.Kind != "disk" && src.Kind != "phone" {
+			return nil, refuse("%s is %s: marks must be set from its own computer", src.Label, readOnlyWhat(src.Kind))
 		}
 		rel, err := cleanRel(it.Path)
 		if err != nil {
@@ -429,7 +429,7 @@ func (s *Server) planItems(items []qItem, job *Job, verb string) (plans []*move,
 			return nil, nil, nil, nil, refuse("unknown source: %s", it.Source)
 		}
 		if src.Kind != "disk" {
-			return nil, nil, nil, nil, refuse("%s is a read-only snapshot: its files cannot be %s", src.Label, verb)
+			return nil, nil, nil, nil, refuse("%s is %s: its files cannot be %s", src.Label, readOnlyWhat(src.Kind), verb)
 		}
 		rel, err := cleanRel(it.Path)
 		if err != nil {

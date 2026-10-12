@@ -4,6 +4,20 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
+## 0.7.0
+
+- Phones. **Add a phone…** in the side bar (or `sidecar phone`, `sidecar phone scan <serial>`) catalogues a
+  phone so it appears next to your disks: map, duplicates, compare, search and the tidying piles' view all work on it.
+  A phone cannot carry a sidecar, so its catalog is kept on this computer in `~/.sidecar/phones`, and the phone is
+  only changed by the two actions below, never by a scan.
+  - Android: read through `adb` (USB debugging on). Lists the shared storage (`/sdcard`) without copying anything.
+  - iPhone: only the camera roll (DCIM), through `ifuse`/libimobiledevice. Apple keeps app data out of reach.
+- Android phones can be emptied safely. **copy to…** pulls files to a disk: each is hashed, compared with the
+  hash the phone itself reports, and only then given its name; nothing is overwritten. **let go from phone…** releases
+  from the phone only files that have an identical copy on a connected disk, where both the phone and the disk
+  file are read again at that moment (a damaged or changed copy proves nothing). It shows the result first
+  and asks you to type `let it go`, because the phone has no farewell box. iPhones stay read only.
+
 ## 0.6.0
 
 - Copy to another disk or folder (**copy to…** next to files and folders, and for the whole *keep* pile). Files are

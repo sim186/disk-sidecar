@@ -77,6 +77,23 @@ time. On a Mac, if a downloaded file is refused, run `xattr -d com.apple.quarant
 On the disk, `.sidecar/sidecar` (`sidecar.cmd` on Windows) runs the right build for the computer
 you are on: `./sidecar serve | scan | hash | merge | mcp | version | install`.
 
+### Phones
+
+A phone cannot carry a sidecar, so its catalog is kept on the computer (`~/.sidecar/phones`) and the phone
+is only read. Connect it, press **Add a phone…** in the app (or run `sidecar phone`, then
+`sidecar phone scan <serial>`), and it joins the disks in the left column. Use Compare against a disk to see
+which photos are already backed up.
+
+- **Android**: needs [`adb`](https://developer.android.com/tools/adb) and USB debugging (Settings, Developer
+  options). Unlock the phone and allow the computer. Sidecar lists the shared storage (`/sdcard`).
+- **iPhone**: only the camera roll. Needs `libimobiledevice` and `ifuse` (macFUSE on a Mac); unlock the
+  phone and tap Trust. App data is sandboxed by Apple and cannot be read.
+
+**Freeing space on an Android phone.** Use **copy to…** to put photos on a disk, then **let go from phone…** on
+the same files or folder. Sidecar reads each file on the phone and its copy on a disk again, and removes from the
+phone only those whose SHA-256 is identical. The rest stay. The phone has no farewell box, so this is permanent and
+asks you to type `let it go`. An iPhone is read only.
+
 ### Copying
 
 Next to every file and folder, **copy to…** copies it to a folder on any connected disk, the same one too.

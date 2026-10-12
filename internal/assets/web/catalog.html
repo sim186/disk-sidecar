@@ -184,6 +184,7 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
       <div id="vstatus"></div>
       <button class="btn hide" id="verify-now">Check now</button>
       <button class="btn quiet hide" id="add-disk">Install on a disk…</button>
+      <button class="btn quiet hide" id="add-phone">Add a phone…</button>
     </div>
   </aside>
 
@@ -263,6 +264,12 @@ mark { background: transparent; color: inherit; font-weight: 700; text-decoratio
     <ul id="adddisk-list"></ul>
     <button class="btn quiet" id="adddisk-close">Not now</button>
   </div></div>
+  <div id="addphone" class="hide"><div class="panel" role="dialog" aria-labelledby="addphone-t">
+    <h3 id="addphone-t">Add a phone</h3>
+    <div class="muted">A phone cannot carry a sidecar, so its catalog is kept on this computer and the phone is only read, never changed. Android: turn on USB debugging and install <code>adb</code>. iPhone: only the camera roll can be read (needs <code>ifuse</code>).</div>
+    <ul id="addphone-list"></ul>
+    <button class="btn quiet" id="addphone-close">Close</button>
+  </div></div>
   <div id="copyto" class="hide"><div class="panel" role="dialog" aria-labelledby="copyto-t">
     <h3 id="copyto-t">Copy to…</h3>
     <div class="muted" id="copyto-what"></div>
@@ -295,7 +302,7 @@ const nf = new Intl.NumberFormat(undefined, { useGrouping: 'always' });
 const fmt = b => { const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (b >= 1024 && i < 4) { b /= 1024; i++; }
   return (i ? b.toLocaleString(undefined, { minimumFractionDigits: b < 100 ? 1 : 0, maximumFractionDigits: b < 100 ? 1 : 0 }) : b) + ' ' + u[i]; };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const srcName = s => s.label + (s.kind === 'snapshot' ? ' (snapshot of ' + new Date(s.scanned_at * 1000).toLocaleDateString() + ')' : '');
+const srcName = s => s.label + (s.kind === 'snapshot' ? ' (snapshot of ' + new Date(s.scanned_at * 1000).toLocaleDateString() + ')' : s.kind === 'phone' ? ' (phone, read ' + new Date(s.scanned_at * 1000).toLocaleDateString() + ')' : '');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const theme = new URLSearchParams(location.search).get('theme');
 if (theme === 'dark' || theme === 'light') document.documentElement.dataset.theme = theme;
@@ -333,9 +340,11 @@ function markOf(sid, p) { // a mark on a folder covers everything inside it
 // Kondo vocabulary: only the words on screen change; stored marks stay keep / delete / review
 const MK = { keep: 'keep', review: 'spark joy?', delete: 'let go' };
 const FM = /Mac/i.test(navigator.platform) ? 'Finder' : /Win/i.test(navigator.platform) ? 'Explorer' : 'file manager';
+const isPhone = sid => { const s = sources.find(x => x.id === sid); return !!s && s.kind === 'phone'; };
 const mkButtons = (sid, p) => '<span class="mk">' + Object.keys(MK).map(m =>
   `<button data-m="${m}" data-sid="${sid}" data-p="${esc(p)}" class="${marks[mkey(sid, p)] === m ? 'on' : ''}">${MK[m]}</button>`).join('') +
   (actions ? `<button class="cp" data-sid="${sid}" data-p="${esc(p)}" title="Copy to another disk or folder; the original stays">copy to…</button>` : '') +
+  (actions && isPhone(sid) ? `<button class="fr" data-sid="${sid}" data-p="${esc(p)}" title="Thank and release from the phone, only what is proven safe on a disk">let go from phone…</button>` : '') +
   (actions ? `<button class="rv" data-sid="${sid}" data-p="${esc(p)}" title="Show in ${FM}">show</button>` : '') + '</span>';
 
 /* ---------- db helpers ---------- */
@@ -387,6 +396,7 @@ async function refreshActions() {
   $('#navquar').classList.toggle('hide', !actions);
   $('#verify-now').classList.toggle('hide', !actions);
   $('#add-disk').classList.toggle('hide', !actions);
+  $('#add-phone').classList.toggle('hide', !actions);
   $('#do-quar').classList.toggle('hide', !actions);
   $('#do-copy').classList.toggle('hide', !actions);
   if (actions) {
@@ -473,7 +483,8 @@ function renderRail() {
     <span class="name">${esc(name)}</span><span class="meta">${meta}</span>${sources.length > 1 ? `<span class="meter"><i style="width:${Math.max(2, Math.round(share * 100))}%"></i></span>` : ''}</button></li>`;
   $('#disks').innerHTML = (sources.length > 1 ? row('all', 'All disks', `${fmt(total)}, ${nf.format(n)} files`, 1) : '') +
     sources.map(s => { const r = by[s.id] || { n: 0, s: 0 };
-      const snap = s.kind === 'snapshot' ? `snapshot of ${new Date(s.scanned_at * 1000).toLocaleDateString()}, ` : '';
+      const snap = s.kind === 'snapshot' ? `snapshot of ${new Date(s.scanned_at * 1000).toLocaleDateString()}, `
+        : s.kind === 'phone' ? `phone, read ${new Date(s.scanned_at * 1000).toLocaleDateString()}, ` : '';
       return row(s.id, s.label, `${snap}${fmt(r.s)}, ${nf.format(r.n)} files`, total ? r.s / total : 0); }).join('');
   $('#disks').querySelectorAll('[data-src]').forEach(b => b.onclick = () => {
     state.source = b.dataset.src; state.prefix = ''; renderRail(); rerenderCurrent();
@@ -748,6 +759,11 @@ document.addEventListener('click', e => {
     api('api/reveal', { source: s ? s.label : '', path: b.dataset.p }).catch(err => toast(err.message));
     return;
   }
+  if (b.classList.contains('fr')) {
+    const s = sources.find(x => x.id === +b.dataset.sid);
+    freeOnPhone([{ source: s ? s.label : '', path: b.dataset.p }]);
+    return;
+  }
   if (b.classList.contains('cp')) {
     const s = sources.find(x => x.id === +b.dataset.sid);
     openCopy([{ source: s ? s.label : '', path: b.dataset.p }]);
@@ -756,6 +772,23 @@ document.addEventListener('click', e => {
   setMark(+b.dataset.sid, b.dataset.p, b.dataset.m);
   rerenderCurrent(); renderRail();
 });
+
+/* ---------- free space on a phone ---------- */
+async function freeOnPhone(items) {
+  let r;
+  try { r = await runJob('api/phone/release', { items, dry: true }, 'Checking the copies on your disks'); }
+  catch (e) { alert('Cannot check:\n\n' + e.message); return; }
+  if (!r.release) return alert(`None of these files is proven safe yet, so nothing can be removed from the phone.\n\nCopy them to a disk first ("copy to…").` + (r.unsafe.length ? '\n\nNo copy found for: ' + r.unsafe.join(', ') : ''));
+  const typed = prompt(`${nf.format(r.release)} files (${fmt(r.bytes)}) have an identical copy on a disk, checked just now.\n` +
+    (r.kept ? `${nf.format(r.kept)} files (${fmt(r.kept_bytes)}) have no proven copy and stay on the phone.\n` : '') +
+    `\nThank them for the memories. The phone has no farewell box, so once released they are gone for good, and the copies on your disks are what remain.\nType "let it go" when you are ready.`);
+  if (!typed || typed.trim().toLowerCase() !== 'let it go') return;
+  try {
+    const d = await runJob('api/phone/release', { items, confirm: 'let it go' }, 'Letting go, with thanks');
+    toast(`Let go of ${nf.format(d.release)} files (${fmt(d.bytes)}) from the phone, with thanks. Each one lives on in a copy on a disk.`);
+    await reloadDb(currentTab());
+  } catch (e) { alert('Stopped:\n\n' + e.message); }
+}
 
 /* ---------- copy to another disk or folder ---------- */
 let copyItems = [];
@@ -789,7 +822,16 @@ $('#copyto-go').onclick = async () => {
   const to = sources.find(x => x.id === +$('#copyto-disk').value);
   $('#copyto').classList.add('hide');
   try {
-    const r = await runJob('api/copy', { items: copyItems, to: { source: to.label, path: $('#copyto-path').value.trim() } }, 'Copying with care', true);
+    const isPh = it => (sources.find(x => x.label === it.source) || {}).kind === 'phone';
+    const dest = { source: to.label, path: $('#copyto-path').value.trim() };
+    const r = { files: 0, bytes: 0 };
+    for (const [path, items] of [['api/copy', copyItems.filter(it => !isPh(it))], ['api/phone/copy', copyItems.filter(isPh)]]) {
+      const bySource = {}; items.forEach(it => (bySource[it.source] = bySource[it.source] || []).push(it)); // one phone at a time
+      for (const group of Object.values(bySource)) {
+        const x = await runJob(path, { items: group, to: dest }, 'Copying with care', true);
+        r.files += x.files; r.bytes += x.bytes;
+      }
+    }
     toast(`Copied ${nf.format(r.files)} files (${fmt(r.bytes)}) to ${to.label}. The originals are untouched.`);
     await reloadDb(currentTab());
   } catch (e) { alert('Not copied:\n\n' + e.message); }
@@ -835,6 +877,30 @@ $('#adddisk-list').onclick = async e => {
     toast(`Sidecar ready on ${d.name}. Next time, open "Open Sidecar" on that disk.`);
     await reloadDb('map');
   } catch (err) { toast('Setup failed: ' + err.message); }
+  finally { setupBusy = false; }
+};
+
+/* ---------- phones ---------- */
+async function showAddPhone() {
+  let phones = [];
+  try { phones = (await api('api/phones')).phones; } catch (e) { toast(e.message); return; }
+  $('#addphone-list').innerHTML = phones.length ? phones.map((p, i) =>
+    `<li><span><b>${esc(p.name)}</b><small>${esc(p.platform === 'ios' ? 'iPhone, camera roll' : 'Android')}${p.state === 'ready' ? '' : ' · ' + esc(p.hint || p.state)}</small></span><button class="btn" data-i="${i}" ${p.state === 'ready' ? '' : 'disabled'}>Read</button></li>`).join('')
+    : '<li><span class="muted">No phone found. Connect it with a cable, unlock it, and allow USB debugging (Android) or Trust (iPhone). Then open this again.</span></li>';
+  $('#addphone').dataset.phones = JSON.stringify(phones);
+  $('#addphone').classList.remove('hide');
+}
+$('#add-phone').onclick = showAddPhone;
+$('#addphone-close').onclick = () => $('#addphone').classList.add('hide');
+$('#addphone-list').onclick = async e => {
+  const b = e.target.closest('button[data-i]'); if (!b) return;
+  const p = JSON.parse($('#addphone').dataset.phones)[+b.dataset.i];
+  $('#addphone').classList.add('hide'); setupBusy = true;
+  try {
+    const r = await runJob('api/phone/scan', { serial: p.serial }, 'Reading ' + p.name);
+    toast(`${p.name}: ${nf.format(r.files)} files (${fmt(r.bytes)}). The phone was not changed.`);
+    await reloadDb('map');
+  } catch (err) { alert('Could not read the phone:\n\n' + err.message); }
   finally { setupBusy = false; }
 };
 

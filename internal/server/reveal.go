@@ -25,7 +25,7 @@ func (s *Server) doReveal(source, rel string) error {
 		return refuse("unknown source: %s", source)
 	}
 	if src.Kind != "disk" {
-		return refuse("%s is a snapshot of another computer: its files are not here", src.Label)
+		return refuse("%s is not a disk on this computer: its files are not here to show", src.Label)
 	}
 	if !dirExists(src.Root) {
 		return refuse("%s is not plugged in", src.Label)

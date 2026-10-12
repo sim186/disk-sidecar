@@ -13,6 +13,7 @@ import (
 	"github.com/sim186/disk-sidecar/internal/install"
 	"github.com/sim186/disk-sidecar/internal/mcp"
 	"github.com/sim186/disk-sidecar/internal/merge"
+	"github.com/sim186/disk-sidecar/internal/phone"
 	"github.com/sim186/disk-sidecar/internal/scan"
 	"github.com/sim186/disk-sidecar/internal/server"
 )
@@ -22,6 +23,7 @@ const usage = `Sidecar %s: a catalog that lives on each of your external disks.
   sidecar install <disk>      put Sidecar on a disk (or update it), and scan it
   sidecar serve               open the catalog in your browser (what a double click does)
   sidecar scan <folder>       index a folder or disk (incremental)
+  sidecar phone [scan <serial>]  list connected phones, or catalogue one (Android via adb, iPhone photos via ifuse)
   sidecar hash                confirm duplicates with SHA-256
   sidecar merge <main> <other>  import another index
   sidecar mcp                 let an LLM search the index (MCP over stdio)
@@ -112,6 +114,31 @@ func main() {
 			die(err)
 		}
 		fmt.Println(st.Summary(*source))
+
+	case "phone":
+		pos := parse(fs, args)
+		if len(pos) == 2 && pos[0] == "scan" {
+			d, ok := phone.Find(pos[1])
+			if !ok {
+				die(fmt.Errorf("no connected phone with serial %q (see: sidecar phone)", pos[1]))
+			}
+			st, err := phone.Scan(d, os.Stderr, nil)
+			if err != nil {
+				die(err)
+			}
+			fmt.Println(st.Summary(d.Name))
+			break
+		}
+		if len(pos) != 0 {
+			die(fmt.Errorf("usage: sidecar phone [scan <serial>]"))
+		}
+		ds := phone.Detect()
+		if len(ds) == 0 {
+			fmt.Println("no phone found (Android needs adb and USB debugging; iPhone needs libimobiledevice and ifuse)")
+		}
+		for _, d := range ds {
+			fmt.Printf("%-8s %-24s %-18s %s %s\n", d.Platform, d.Serial, d.State, d.Name, d.Hint)
+		}
 
 	case "hash":
 		db := fs.String("db", "", "index to update (default: the index of the disk this program is on)")

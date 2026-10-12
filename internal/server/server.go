@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/sim186/disk-sidecar/internal/assets"
+	"github.com/sim186/disk-sidecar/internal/phone"
 )
 
 // Config of the server.
@@ -199,6 +200,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, 200, map[string]any{"disks": s.volumes()})
+	case p == "/api/phones":
+		if !s.authorised(r) {
+			writeJSON(w, 403, map[string]string{"error": "missing token"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"phones": phone.Detect()})
 	case p == "/api/state":
 		if !s.authorised(r) {
 			writeJSON(w, 403, map[string]string{"error": "missing token"})
@@ -346,6 +353,45 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 			return
 		}
 		startJob(func(j *Job) (any, error) { return s.doSetup(*vol, j) })
+	case "/api/phone/copy":
+		var d copyReq
+		if err := json.Unmarshal(body, &d); err != nil {
+			bad(err)
+			return
+		}
+		startJob(func(j *Job) (any, error) { return s.doPhoneCopy(d, j) })
+	case "/api/phone/release":
+		var d struct {
+			Items   []qItem `json:"items"`
+			Confirm string  `json:"confirm"`
+			Dry     bool    `json:"dry"`
+		}
+		if err := json.Unmarshal(body, &d); err != nil {
+			bad(err)
+			return
+		}
+		startJob(func(j *Job) (any, error) { return s.doPhoneRelease(d.Items, d.Confirm, d.Dry, j) })
+	case "/api/phone/scan":
+		var d struct {
+			Serial string `json:"serial"`
+		}
+		if err := json.Unmarshal(body, &d); err != nil {
+			bad(err)
+			return
+		}
+		dev, ok := phone.Find(d.Serial)
+		if !ok {
+			fail(w, refuse("that phone is not connected"))
+			return
+		}
+		startJob(func(j *Job) (any, error) {
+			j.Phase("Reading " + dev.Name)
+			st, err := phone.Scan(dev, nil, func(n int) { j.SetDone(int64(n)) })
+			if err != nil {
+				return nil, refuse("%v", err)
+			}
+			return map[string]any{"files": st.Total, "bytes": st.Size, "name": dev.Name}, nil
+		})
 	case "/api/disk/ignore":
 		var d struct {
 			Path    string `json:"path"`

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/sim186/disk-sidecar/internal/idx"
+	"github.com/sim186/disk-sidecar/internal/phone"
 )
 
 // Disk is a plugged-in disk that carries an index.
@@ -32,7 +33,7 @@ func (d *Disk) Dir() string { return filepath.Dir(d.DB) }
 type Src struct {
 	Label, Raw, DB string
 	SID            int64
-	Root, Kind     string // Kind: "disk" or "snapshot"
+	Root, Kind     string // Kind: "disk", "snapshot" (another computer) or "phone"
 	ScannedAt      int64
 	Disk           *Disk
 }
@@ -210,6 +211,28 @@ func (s *Server) listSources() ([]*Src, []*Disk) {
 		}
 		db.Close()
 	}
+	if dir, err := phone.Dir(); err == nil { // phones: catalogued from this computer, read only
+		files, _ := filepath.Glob(filepath.Join(dir, "*.db"))
+		sort.Strings(files)
+		for _, f := range files {
+			db, err := idx.OpenRO(f)
+			if err != nil {
+				continue
+			}
+			rows, err := db.Query(`SELECT id, label, COALESCE(scanned_at,0) FROM sources ORDER BY id`)
+			if err == nil {
+				for rows.Next() {
+					var id, at int64
+					var label string
+					if rows.Scan(&id, &label, &at) == nil {
+						srcs = append(srcs, &Src{Label: uniq(label, "phone"), Raw: label, DB: f, SID: id, Kind: "phone", ScannedAt: at})
+					}
+				}
+				rows.Close()
+			}
+			db.Close()
+		}
+	}
 	return srcs, disks
 }
 
@@ -230,3 +253,11 @@ func dirExists(p string) bool {
 }
 
 func placeholders(n int) string { return strings.TrimSuffix(strings.Repeat("?,", n), ",") }
+
+// readOnlyWhat names a source that cannot be changed, for the messages that refuse to change it.
+func readOnlyWhat(kind string) string {
+	if kind == "phone" {
+		return "a phone, which Sidecar only reads"
+	}
+	return "a read-only snapshot"
+}
