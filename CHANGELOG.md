@@ -4,7 +4,7 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
-## Unreleased
+## 0.8.1
 
 - This computer no longer slows the computer down. Installing on the system disk scanned the whole home folder and
   read the text of every text, code and PDF file, then did it again each time the app started.
