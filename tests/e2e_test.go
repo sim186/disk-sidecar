@@ -835,6 +835,7 @@ func TestServerUpdateNoticeAndInstallOnADisk(t *testing.T) {
 		}
 	}
 	s.token = regexp.MustCompile(`sidecar-token" content="([^"]+)`).FindStringSubmatch(html)[1]
+	s.waitStartup() // the check at start is an operation too: setup would be refused while it runs
 
 	var upd map[string]any
 	for i := 0; i < 50 && upd == nil; i++ {
