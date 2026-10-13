@@ -4,6 +4,16 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
+## Unreleased
+
+- Copying from a phone follows the same rules as copying between disks: it refuses a destination folder that is a
+  symbolic link, and if one of several chosen items fails, the items already copied are kept (and listed in the
+  catalog) instead of being removed too.
+- The log of a disk (`.sidecar/log.csv`) names where each copy came from: `photos/2026 (from Disk A)`.
+- Photo previews no longer re-read every index for each picture while the page scrolls.
+- Inside, the rules that protect files (the farewell box, verified copies, the index layout and the list of what is
+  plugged in) each live in one module with their own tests.
+
 ## 0.8.1
 
 - This computer no longer slows the computer down. Installing on the system disk scanned the whole home folder and

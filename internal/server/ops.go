@@ -171,7 +171,7 @@ func (s *Server) state() map[string]any {
 	if warnings == nil {
 		warnings = []string{}
 	}
-	return map[string]any{"actions": true, "version": assets.Version, "quarantine": s.box(nil).Contents(),
+	return map[string]any{"actions": true, "version": assets.Version, "quarantine": farewell.Box{Catalog: cat}.Contents(),
 		"sources": out, "startup_job": startup, "verify": verify, "warnings": warnings}
 }
 
