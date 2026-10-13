@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -113,8 +114,30 @@ func SHA256(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// Run scans o.Root into the index o.DB as source o.Label.
+// homeSkipDirs are left out at any depth when scanning the user's home folder: libraries, caches
+// and environments that hold many small files nobody tidies by hand.
+var homeSkipDirs = map[string]bool{"node_modules": true, "__pycache__": true, "venv": true, "site-packages": true,
+	"Pods": true, "vcpkg_installed": true}
+
+// Run scans o.Root into the index o.DB as source o.Label. It runs at background priority, so a
+// scan of the disk the system runs on does not slow down the rest of the computer.
 func Run(o Options) (Stats, error) {
+	type result struct {
+		st  Stats
+		err error
+	}
+	c := make(chan result, 1)
+	go func() {
+		runtime.LockOSThread() // never unlocked: the thread ends with this goroutine, and its lowered priority with it
+		background()
+		st, err := run(o)
+		c <- result{st, err}
+	}()
+	r := <-c
+	return r.st, r.err
+}
+
+func run(o Options) (Stats, error) {
 	t0 := time.Now()
 	var st Stats
 	root := o.Root
@@ -144,7 +167,7 @@ func Run(o Options) (Stats, error) {
 		return st, err
 	}
 
-	homeMode := o.Entries == nil && isHome(root) // the user's home folder: leave out the folders where programs keep their data
+	homeMode := o.Entries == nil && IsHome(root) // the user's home folder: leave out the folders where programs keep their data
 	type fsig struct{ size, mtime int64 }
 	known := map[string]fsig{}
 	rows, err := db.Query(`SELECT path, size, mtime FROM files WHERE source_id=?`, sid)
@@ -271,7 +294,8 @@ func Run(o Options) (Stats, error) {
 				if path != root && idx.SkipDirs[name] {
 					return fs.SkipDir
 				}
-				if homeMode && filepath.Dir(path) == root && (name == "Library" || name == "AppData" || strings.HasPrefix(name, ".")) {
+				if homeMode && (strings.HasPrefix(name, ".") || homeSkipDirs[name] ||
+					filepath.Dir(path) == root && (name == "Library" || name == "AppData")) {
 					return fs.SkipDir
 				}
 				return nil
@@ -297,7 +321,11 @@ func Run(o Options) (Stats, error) {
 			if err != nil {
 				return nil
 			}
-			return process(filepath.ToSlash(rel), info.Size(), info.ModTime().Unix(), path)
+			local := path
+			if Placeholder(info) { // only in the cloud: list it, but reading it would download it
+				local = ""
+			}
+			return process(filepath.ToSlash(rel), info.Size(), info.ModTime().Unix(), local)
 		})
 	}
 	if walkErr != nil {
@@ -348,7 +376,9 @@ func (st Stats) Summary(label string) string {
 		float64(st.Size)/1e9, st.New, st.Changed, st.Same, st.Removed, st.Errors, st.Secs)
 }
 
-func isHome(root string) bool {
+// IsHome tells whether root is the home folder of the user running this program, on the disk the
+// system runs on. It is scanned by name only unless text is asked for, and not re-checked at start.
+func IsHome(root string) bool {
 	h, err := os.UserHomeDir()
 	if err != nil || h == "" {
 		return false

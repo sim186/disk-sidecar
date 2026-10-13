@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/sim186/disk-sidecar/internal/scan"
 	"github.com/sim186/disk-sidecar/internal/thumb"
 )
 
@@ -21,6 +22,10 @@ func (s *Server) serveThumb(w http.ResponseWriter, r *http.Request) {
 	full, _, err := s.diskFile(q.Get("source"), q.Get("path"))
 	if err != nil {
 		http.Error(w, err.Error(), 404)
+		return
+	}
+	if info, err := os.Stat(full); err != nil || scan.Placeholder(info) { // only in the cloud: never downloaded for a preview
+		http.Error(w, "no preview", 404)
 		return
 	}
 	cache := ""

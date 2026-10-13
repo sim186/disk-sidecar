@@ -295,7 +295,7 @@ func Run(o Options) error {
 	}
 	os.WriteFile(filepath.Join(target, "MANIFEST"), []byte(strings.Join(rels, "\n")+"\n"), 0o644)
 	if runtime.GOOS == "windows" {
-		exec.Command("attrib", "+h", target).Run()
+		exec.Command("attrib", "+h", "+i", target).Run() // hidden, and not indexed by Windows Search
 	}
 	tidy(target)
 	home := IsHome(disk)
@@ -321,7 +321,9 @@ func Run(o Options) error {
 	if statErr != nil && !o.NoScan && (o.Scan || o.Yes || ask(o, fmt.Sprintf("Scan the disk now as '%s'? (about a minute per 100,000 files)", label), true)) {
 		fmt.Fprintln(o.Out, "Scanning...")
 		host, _ := os.Hostname()
-		st, err := scan.Run(scan.Options{Root: disk, DB: index, Label: label, Host: host, HashMin: -1, Text: true, Progress: o.Progress, Log: o.Err})
+		// the system disk by name only: reading the text of every file in a home folder is slow and
+		// keeps the disk busy (`sidecar scan ~ --text` adds it)
+		st, err := scan.Run(scan.Options{Root: disk, DB: index, Label: label, Host: host, HashMin: -1, Text: !home, Progress: o.Progress, Log: o.Err})
 		if err != nil {
 			return fmt.Errorf("the scan failed: %w", err)
 		}

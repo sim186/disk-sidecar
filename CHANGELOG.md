@@ -4,6 +4,18 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
+## Unreleased
+
+- This computer no longer slows the computer down. Installing on the system disk scanned the whole home folder and
+  read the text of every text, code and PDF file, then did it again each time the app started.
+  - The home folder is catalogued by name only (`sidecar scan ~ --text` reads text too), and hidden folders,
+    `node_modules`, `venv`, `__pycache__`, `site-packages`, `Pods` and `vcpkg_installed` are left out at any depth.
+  - The check at start leaves out this computer; **Check now** in the app still includes it.
+  - Files only in the cloud (OneDrive Files On-Demand, iCloud Drive with Optimise Mac Storage) are listed but never
+    read, so scans and photo previews no longer download them.
+  - Scans run at background CPU and disk priority on macOS, Windows and Linux, on every disk.
+  - On Windows the `.sidecar` folder is also left out of Windows Search.
+
 ## 0.8.0
 
 - Map: switch between **Folders** and **All files** (a flat list of the largest files, sortable by name, size or

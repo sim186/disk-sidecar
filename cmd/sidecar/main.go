@@ -93,6 +93,7 @@ func main() {
 		source := fs.String("source", "", "name of this disk or computer in the app (default: the folder name)")
 		hashMin := fs.Float64("hash-min-mb", -1, "also SHA-256 files of at least this size while scanning")
 		noText := fs.Bool("no-text", false, "do not read file contents")
+		withText := fs.Bool("text", false, "read file contents in your home folder too (by default it is scanned by name only)")
 		pos := parse(fs, args)
 		if len(pos) != 1 {
 			die(fmt.Errorf("usage: sidecar scan <folder> [--db index.db] [--source name]"))
@@ -109,7 +110,7 @@ func main() {
 			hm = int64(*hashMin * 1024 * 1024)
 		}
 		host, _ := os.Hostname()
-		st, err := scan.Run(scan.Options{Root: root, DB: *db, Label: *source, Host: host, HashMin: hm, Text: !*noText, Log: os.Stderr})
+		st, err := scan.Run(scan.Options{Root: root, DB: *db, Label: *source, Host: host, HashMin: hm, Text: !*noText && (*withText || !scan.IsHome(root)), Log: os.Stderr})
 		if err != nil {
 			die(err)
 		}

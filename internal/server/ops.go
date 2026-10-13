@@ -826,7 +826,9 @@ func (s *Server) doEmpty(confirm string, job *Job) (any, error) {
 
 // ---------------------------------------------------------------- verification of changes made by hand
 
-func (s *Server) doVerify(job *Job) (any, error) {
+func (s *Server) doVerify(job *Job) (any, error) { return s.verify(job, true) }
+
+func (s *Server) verify(job *Job, withHome bool) (any, error) {
 	srcs, _ := s.listSources()
 	host, _ := os.Hostname()
 	totals := map[string]any{"new": 0, "changed": 0, "removed": 0, "errors": 0, "disks": 0, "secs": 0.0,
@@ -838,6 +840,10 @@ func (s *Server) doVerify(job *Job) (any, error) {
 		if src.Kind != "disk" || !dirExists(src.Root) {
 			continue
 		}
+		home := scan.IsHome(src.Root)
+		if home && !withHome {
+			continue
+		}
 		hint := int64(0)
 		if db, err := idx.OpenRO(src.DB); err == nil {
 			db.QueryRow(`SELECT COUNT(*) FROM files WHERE source_id=?`, src.SID).Scan(&hint)
@@ -846,7 +852,7 @@ func (s *Server) doVerify(job *Job) (any, error) {
 		if job != nil {
 			job.Update("Checking "+src.Label+"…", 0, hint)
 		}
-		st, err := scan.Run(scan.Options{Root: src.Root, DB: src.DB, Label: src.Raw, Host: host, HashMin: -1, Text: true,
+		st, err := scan.Run(scan.Options{Root: src.Root, DB: src.DB, Label: src.Raw, Host: host, HashMin: -1, Text: !home,
 			Progress: func(n int) {
 				if job != nil {
 					job.SetDone(int64(n))

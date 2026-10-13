@@ -110,7 +110,9 @@ func Run(cfg Config, out io.Writer) error {
 	return nil
 }
 
-func (s *Server) doVerify2(job *Job) (any, error) { return s.doVerify(job) }
+// doVerify2 is the check at start. It leaves out this computer: walking a whole home folder at
+// every start keeps the system disk busy. "Check now" in the app still includes it.
+func (s *Server) doVerify2(job *Job) (any, error) { return s.verify(job, false) }
 
 func openBrowser(url string) {
 	var cmd *exec.Cmd

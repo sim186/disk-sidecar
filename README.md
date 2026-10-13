@@ -111,7 +111,16 @@ put the original in the *let go* pile: because the copy is now a proven duplicat
 The system disk is not an external disk, so Sidecar does not offer it when it finds one. To catalog it, choose
 **This computer** in the install dialog ("Install on a disk…"), or run `sidecar install ~` (Windows:
 `sidecar install %USERPROFILE%`). That installs into `~/.sidecar` and scans your home folder, leaving out
-`Library`, `AppData` and hidden folders. On the system disk Sidecar only ever changes files inside a user
+`Library`, `AppData`, hidden folders and, at any depth, `node_modules`, `venv`, `__pycache__`, `site-packages`,
+`Pods` and `vcpkg_installed`. Because this is the disk your system runs on, Sidecar is careful with it:
+
+- Files are catalogued by name only: their text is not read for search. `sidecar scan ~ --text` adds it.
+- Files that are only in the cloud (OneDrive Files On-Demand, iCloud Drive with Optimise Mac Storage) are listed but
+  never opened, so nothing is downloaded, not even for a photo preview.
+- The app does not re-check this computer when it starts. **Check now** in the app still does.
+- Every scan runs at background priority, so the disk and processor go to your other programs first.
+
+On the system disk Sidecar only ever changes files inside a user
 folder: moving to the farewell box, restoring and copying are refused on the operating system, programs, other
 users' folders, the home folder itself and the folders where programs keep their data. Marks are notes
 and still work everywhere. Disks mounted under `/Volumes`, `/media`, `/mnt` or another drive letter are not
