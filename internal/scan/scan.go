@@ -14,7 +14,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -27,6 +29,16 @@ const maxTextBytes = 256 * 1024
 // huge and nobody searches them.
 var noTextDirs = map[string]bool{"node_modules": true, ".git": true, ".out": true, "build": true, "vcpkg_installed": true,
 	"target": true, "venv": true, ".venv": true, "__pycache__": true, "Pods": true, "site-packages": true, ".gradle": true}
+
+// noTextKey names the current list of noTextDirs, to know whether old text in them was cleaned.
+var noTextKey = func() string {
+	var ds []string
+	for d := range noTextDirs {
+		ds = append(ds, d)
+	}
+	sort.Strings(ds)
+	return strings.Join(ds, "/")
+}()
 
 func textAllowed(rel string) bool {
 	parts := strings.Split(rel, "/")
@@ -56,6 +68,10 @@ type Options struct {
 	// Entries, when set, lists the files instead of walking Root: for a source that is not a folder
 	// on this computer (a phone read through adb). Nothing is hashed or read for text then.
 	Entries func(yield func(Entry) error) error
+	// WriteLock, when set, is held around each write transaction, so another writer in the same
+	// program (a click on Keep or Let go) gets its turn between two of them instead of starving:
+	// SQLite's own busy wait keeps missing the moment the lock is free.
+	WriteLock sync.Locker
 }
 
 // Entry is one file reported by Options.Entries; Path is relative, with forward slashes.
@@ -189,6 +205,21 @@ func run(o Options) (Stats, error) {
 		return st, err
 	}
 	count := 0
+	var dirtySince time.Time // first write of the open transaction
+	held := false
+	hold := func() {
+		if o.WriteLock != nil && !held {
+			o.WriteLock.Lock()
+			held = true
+		}
+	}
+	release := func() {
+		if held {
+			o.WriteLock.Unlock()
+			held = false
+		}
+	}
+	defer release()
 	logf := func(format string, a ...any) {
 		if o.Log != nil {
 			fmt.Fprintf(o.Log, format+"\n", a...)
@@ -202,9 +233,14 @@ func run(o Options) (Stats, error) {
 		if o.Progress != nil && count%500 == 0 {
 			o.Progress(count)
 		}
-		if count%5000 == 0 {
+		// commit every 5000 files, and also once the write lock has been held for a moment: on a slow
+		// disk 5000 files can take many seconds to walk, and a click on Keep or Let go waits for the lock
+		if count%5000 == 0 || (!dirtySince.IsZero() && time.Since(dirtySince) > 200*time.Millisecond) {
+			dirtySince = time.Time{}
 			files.Close()
-			if err := tx.Commit(); err != nil {
+			err := tx.Commit()
+			release()
+			if err != nil {
 				return err
 			}
 			if tx, err = db.Begin(); err != nil {
@@ -228,6 +264,10 @@ func run(o Options) (Stats, error) {
 				st.Errors++
 				logf("hash error %s: %v", rel, err)
 			}
+		}
+		if dirtySince.IsZero() {
+			hold()
+			dirtySince = time.Now()
 		}
 		id, err := files.Put(rel, size, mtime, sum)
 		if err != nil {
@@ -310,6 +350,7 @@ func run(o Options) (Stats, error) {
 		tx.Rollback()
 		return st, walkErr
 	}
+	hold()                 // the last transaction: files gone from the disk, and the time of this scan
 	for p := range known { // gone from the disk
 		if _, ok := seen[p]; ok {
 			continue
@@ -320,19 +361,31 @@ func run(o Options) (Stats, error) {
 		}
 		st.Removed++
 	}
-	if o.Text { // text kept from a time when these folders were still indexed
+	// text kept from a time when these folders were still indexed. New text never lands there, so
+	// this runs once per list of folders, not at every check: each pass reads every file of the disk
+	// while holding the write lock
+	cleaned := fmt.Sprintf("notext_dirs:%d", sid)
+	var done string
+	tx.QueryRow(`SELECT value FROM meta WHERE key=?`, cleaned).Scan(&done)
+	if o.Text && done != noTextKey {
 		for d := range noTextDirs {
 			if err := idx.DropTextUnder(tx, sid, d); err != nil {
 				tx.Rollback()
 				return st, err
 			}
 		}
+		if err := idx.SetMeta(tx, cleaned, noTextKey); err != nil {
+			tx.Rollback()
+			return st, err
+		}
 	}
 	if err := idx.MarkScanned(tx, sid); err != nil {
 		tx.Rollback()
 		return st, err
 	}
-	if err := tx.Commit(); err != nil {
+	err = tx.Commit()
+	release()
+	if err != nil {
 		return st, err
 	}
 	if err := db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(size),0) FROM files WHERE source_id=?`, sid).Scan(&st.Total, &st.Size); err != nil {

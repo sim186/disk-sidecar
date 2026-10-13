@@ -55,6 +55,13 @@ a link if so. It sends nothing about you or your disks, and never installs by it
 `sidecar serve --no-update-check` or `SIDECAR_NO_UPDATE_CHECK=1`. A disk plugged in while the app runs is
 offered a sidecar too (`--no-watch` turns that off).
 
+**Stopping.** Press Ctrl+C or close the Terminal window. Sidecar also stops by itself after 30 minutes
+with no page open and nothing running (`--idle-exit 2h` changes that, `--idle-exit 0` turns it off);
+the page says so and reconnects when you start it again. Opening Sidecar while it already runs just
+opens the page; if the running one is an older build (a disk updated meanwhile), it is asked to stop
+and the new one takes its place. Each way out removes the temporary copy of the catalog, and copies
+left by a server that was killed are removed at the next start.
+
 The builds are not code-signed, so macOS (Gatekeeper) and Windows (SmartScreen) may warn the first
 time. On a Mac, if a downloaded file is refused, run `xattr -d com.apple.quarantine <file>`.
 
@@ -212,6 +219,21 @@ rule that protects your files). The page's dependencies (sql.js, MIT; Atkinson H
 OFL) are vendored in `internal/assets/web/vendor`, so it works offline. SQLite is
 [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite), pure Go, which is why no C compiler is
 needed and every system builds from a single machine.
+
+**Performance.** A separate harness builds a fake disk of 100,000 files (sparse, so it takes little
+space), serves it and times what a person waits for: the page loading, a click on Keep / Let go, the
+tidying piles, the page refreshing after a change, and a click while the check at start rewrites the
+index. The page is driven in headless Chrome by `tests/perf/page.mjs` (Node 22 or later, no packages;
+skipped without Node or Chrome). Every measure has a budget and the test fails over it. Two counters
+are exact: a click on an answer runs no SQL at all, and drawing a folder never reads the whole disk.
+
+```sh
+SIDECAR_PERF=1 go test ./tests -run TestPerf -v                          # about 20 s
+SIDECAR_PERF=1 SIDECAR_PERF_FILES=300000 go test ./tests -run TestPerf -v  # a bigger disk
+```
+
+`SIDECAR_PERF_SLACK=2` doubles the time budgets on a slow machine, `SIDECAR_PERF_OUT=run.json` saves
+the measures to compare two runs, `SIDECAR_CHROME=path` picks the browser.
 
 What has and has not been checked:
 

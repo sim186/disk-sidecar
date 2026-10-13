@@ -208,6 +208,8 @@ td.path .thumb, .group .p .thumb { float: left; margin-top: 1px; }
 #busy h3 { margin: 0 0 .9rem; }
 #busy .bar { height: 6px; background: var(--rule); }
 #busy .bar i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .3s; }
+#vbar { height: 4px; background: var(--rule); margin-top: .35rem; }
+#vbar i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .3s; }
 #busy .txt { margin-top: .6rem; overflow-wrap: anywhere; }
 #adddisk, #copyto { position: fixed; inset: 0; background: color-mix(in srgb, var(--ground) 82%, transparent); display: flex; align-items: center; justify-content: center; z-index: 52; }
 #adddisk .panel, #copyto .panel { background: var(--paper); border: 2px solid var(--ink); padding: 1.4rem 1.6rem; width: min(34rem, 92vw); max-height: 85vh; overflow: auto; }
@@ -228,7 +230,12 @@ td.path .thumb, .group .p .thumb { float: left; margin-top: 1px; }
   main { padding: 1.6rem 1.2rem 3rem; }
   .figures { grid-template-columns: 1fr; gap: 1rem; }
 }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+/* thin bar along the top while the page waits for the server */
+#loading { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 70; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity .15s; }
+#loading.on { opacity: 1; }
+#loading i { position: absolute; top: 0; bottom: 0; width: 30%; background: var(--ink); animation: loading 1.1s ease-in-out infinite; }
+@keyframes loading { from { left: -30%; } to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } #loading i { animation: none; left: 0; width: 100%; opacity: .5; } }
 </style>
 </head>
 <body>
@@ -260,6 +267,7 @@ td.path .thumb, .group .p .thumb { float: left; margin-top: 1px; }
     </div>
     <div class="foot">
       <div id="vstatus"></div>
+      <div class="vbar hide" id="vbar"><i id="vbar-i"></i></div>
       <button class="btn hide" id="verify-now">Check now</button>
       <button class="btn quiet hide" id="add-disk">Install on a disk…</button>
       <button class="btn quiet hide" id="add-phone">Add a phone…</button>
@@ -383,6 +391,7 @@ td.path .thumb, .group .p .thumb { float: left; margin-top: 1px; }
   </div>
   <div id="ctx" class="hide" role="menu"></div>
   <div id="toast" class="hide" role="status"></div>
+  <div id="loading" role="progressbar" aria-label="Loading" aria-hidden="true"><i></i></div>
 </div>
 
 <script src="vendor/sql-wasm.js"></script>
@@ -482,16 +491,28 @@ const pathCell = (p, hl = esc) => { const i = p.lastIndexOf('/'); return (i > 0 
 const rowCls = (sid, p) => { const m = markOf(sid, p); return m ? ` class="m-${m}"` : ''; };
 
 /* ---------- db helpers ---------- */
+// The files never change while a copy of the index is open, so answers are kept until the next
+// open(): a click on Keep / Let go redraws the view without asking SQLite again. Callers must not
+// change the rows they get. The compare tab's temporary tables change, so they are never kept.
+let qcache = new Map();
 function q(sql, params = []) {
+  const key = /tmp_/.test(sql) ? '' : sql + '\u0000' + JSON.stringify(params);
+  if (key && qcache.has(key)) return qcache.get(key);
   const st = db.prepare(sql); st.bind(params); const rows = [];
   while (st.step()) rows.push(st.getAsObject());
-  st.free(); return rows;
+  st.free();
+  if (key) { if (qcache.size > 400) qcache.clear(); qcache.set(key, rows); }
+  return rows;
 }
-function where(withKind = true) {
-  const w = [], p = [];
-  if (state.source !== 'all') { w.push('source_id = ?'); p.push(+state.source); }
-  if (withKind && state.kind !== 'all') { w.push('kind = ?'); p.push(state.kind); }
-  return [w.length ? ' AND ' + w.join(' AND ') : '', p];
+// The files under a folder (pre ends with "/", or is "" for the whole disk) as a range on the
+// (source_id, path) index, so a folder costs what it holds rather than a pass over every file.
+// "+kind" keeps SQLite from preferring the kind index over that range.
+function where(pre, withKind = true) {
+  const ids = state.source === 'all' ? sources.map(s => s.id) : [+state.source];
+  const w = [`source_id IN (${ids.map(() => '?').join(',')})`], p = [...ids];
+  if (pre) { w.push('path >= ? AND path < ?'); p.push(pre, pre.slice(0, -1) + '0'); } // '0' follows '/'
+  if (withKind && state.kind !== 'all') { w.push('+kind = ?'); p.push(state.kind); }
+  return [w.join(' AND '), p];
 }
 
 // Previews: photos on a disk plugged in, drawn small and only when scrolled into view. Phones are
@@ -515,10 +536,21 @@ document.addEventListener('error', e => {
 /* ---------- local server (only when the page is served by serve.py) ---------- */
 const TOKEN = (document.querySelector('meta[name=sidecar-token]') || {}).content || '';
 let actions = false, quarState = { quarantine: [] }, watchedJob = null;
+// loading() shows the top bar while a request is out, if it lasts more than a moment
+let loadingN = 0, loadingT;
+function loading(p) {
+  if (++loadingN === 1) loadingT = setTimeout(() => { const l = $('#loading'); l.classList.add('on'); l.setAttribute('aria-hidden', 'false'); }, 200);
+  return p.finally(() => {
+    if (--loadingN) return;
+    clearTimeout(loadingT); const l = $('#loading'); l.classList.remove('on'); l.setAttribute('aria-hidden', 'true');
+  });
+}
 async function api(path, body) {
-  const r = await fetch(path, { method: body ? 'POST' : 'GET', cache: 'no-store',
-    headers: { 'X-Sidecar-Token': TOKEN, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
-  const j = await r.json().catch(() => ({}));
+  const quiet = /^api\/(job|newdisks)\b/.test(path); // polls in the background have their own progress
+  const req = fetch(path, { method: body ? 'POST' : 'GET', cache: 'no-store',
+    headers: { 'X-Sidecar-Token': TOKEN, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+    .then(async r => [r, await r.json().catch(() => ({}))]);
+  const [r, j] = await (quiet ? req : loading(req));
   if (!r.ok) throw new Error(j.error || ('error ' + r.status));
   return j;
 }
@@ -566,10 +598,29 @@ $('#previews').onchange = e => {
   const b = document.querySelector('#nav button.on'); if (b) b.click();
 };
 async function reloadDb(tab) {
-  const r = await fetch('index.db', { cache: 'no-store' });
-  open(new Uint8Array(await r.arrayBuffer()), true);
-  await refreshActions();
-  const b = document.querySelector(`#nav button[data-tab="${tab || 'map'}"]`); if (b) b.click();
+  // the server may have to rebuild its copy of the catalog first, which takes a while on a big disk
+  $('#busy-title').textContent = 'Refreshing the catalog'; $('#busy-bar').style.width = '0%';
+  $('#busy-text').textContent = 'The server is preparing the catalog…';
+  $('#busy').classList.remove('hide');
+  try {
+    const r = await loading(fetch('index.db', { cache: 'no-store' }));
+    const total = +r.headers.get('Content-Length') || 0;
+    let bytes;
+    if (r.body && total) {
+      const chunks = []; let got = 0; const rd = r.body.getReader();
+      for (;;) {
+        const { done, value } = await rd.read(); if (done) break;
+        chunks.push(value); got += value.length;
+        $('#busy-bar').style.width = Math.round(got / total * 100) + '%';
+        $('#busy-text').textContent = `Loading the catalog: ${fmt(got)} of ${fmt(total)}`;
+      }
+      bytes = new Uint8Array(got); let o = 0; chunks.forEach(c => { bytes.set(c, o); o += c.length; });
+    } else bytes = new Uint8Array(await r.arrayBuffer());
+    $('#busy-text').textContent = 'Reading the catalog…'; await sleep(30); // let the message paint before the page works
+    open(bytes, true);
+    await refreshActions();
+    const b = document.querySelector(`#nav button[data-tab="${tab || 'map'}"]`); if (b) b.click();
+  } finally { $('#busy').classList.add('hide'); }
 }
 
 /* ---------- what changed by hand since last time ---------- */
@@ -583,7 +634,8 @@ async function watchVerify(jobId) {
     for (;;) {
       const j = await api('api/job?id=' + jobId);
       if (j.state === 'running') {
-        st.textContent = j.phase.replace('…', '') + (j.total ? `: ${nf.format(Math.min(j.done, j.total))} of ${nf.format(j.total)}` : '');
+        st.textContent = j.phase.replace('…', '') + (j.total ? `: ${nf.format(Math.min(j.done, j.total))} of ${nf.format(j.total)}` : j.done ? `: ${nf.format(j.done)} files so far` : '');
+        $('#vbar').classList.remove('hide'); $('#vbar-i').style.width = (j.total ? Math.min(100, Math.round(j.done / j.total * 100)) : 0) + '%';
         await sleep(700); continue;
       }
       if (j.state === 'error') { st.textContent = 'Check failed: ' + j.error; return; }
@@ -597,21 +649,23 @@ async function watchVerify(jobId) {
       return;
     }
   } catch (e) { st.textContent = 'Check failed: ' + e.message; }
+  finally { $('#vbar').classList.add('hide'); }
 }
 
 /* ---------- load ---------- */
 async function boot() {
   window.SQL = await initSqlJs({ locateFile: f => 'vendor/' + f });
   try {
-    const r = await fetch('index.db'); if (!r.ok) throw 0;
-    open(new Uint8Array(await r.arrayBuffer()));
+    const bytes = await loading(fetch('index.db').then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); }));
+    open(new Uint8Array(bytes));
   } catch (e) {
     $('#dropmsg').textContent = 'Open the index.db file to begin.';
     if (TOKEN) { $('#dropmsg').textContent = 'No disk has Disk Sidecar yet.'; showAddDisk(true); }
   }
 }
 function open(bytes, fromReload) {
-  db = new SQL.Database(bytes);
+  if (db) db.close(); // the old copy lives in WebAssembly memory, which is not collected by itself
+  db = new SQL.Database(bytes); qcache = new Map(); searchCache = {};
   try { sources = q('SELECT id, label, scanned_at, kind FROM sources ORDER BY id'); }
   catch (e) { sources = q('SELECT id, label, scanned_at FROM sources ORDER BY id'); }
   if (diskParam && !fromReload && sources.some(s => s.id === +diskParam)) state.source = String(+diskParam);
@@ -661,22 +715,30 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
 /* ---------- treemap ---------- */
 const prefixOf = () => state.prefix ? state.prefix + '/' : '';
 function children() {
-  const pre = prefixOf(); const [w, p] = where();
+  const pre = prefixOf(); const [w, p] = where(pre);
   return q(`SELECT name, isdir, SUM(size) size, COUNT(*) n, MIN(sid) sid, kind FROM (
       SELECT source_id sid, size, kind,
         CASE WHEN instr(seg,'/')>0 THEN substr(seg,1,instr(seg,'/')-1) ELSE seg END name,
         instr(seg,'/')>0 isdir
-      FROM (SELECT source_id, size, kind, substr(path, ?) seg FROM files WHERE substr(path,1,?) = ? ${w}))
-    GROUP BY name, isdir ORDER BY size DESC`, [pre.length + 1, pre.length, pre, ...p]);
+      FROM (SELECT source_id, size, kind, substr(path, ?) seg FROM files WHERE ${w}))
+    GROUP BY name, isdir ORDER BY size DESC`, [pre.length + 1, ...p]);
 }
 function kindTotals() {
-  const pre = prefixOf(); const [w, p] = where(false);
-  return Object.fromEntries(q(`SELECT kind, SUM(size) s FROM files WHERE substr(path,1,?) = ? ${w} GROUP BY kind`, [pre.length, pre, ...p]).map(r => [r.kind, r.s]));
+  const pre = prefixOf(); const [w, p] = where(pre, false);
+  return Object.fromEntries(q(`SELECT kind, SUM(size) s FROM files WHERE ${w} GROUP BY kind`, p).map(r => [r.kind, r.s]));
 }
+// the kind that takes the most space in each sub-folder of this view, all in one query
+let domCache = { rows: null, by: {} };
 function dominantKind(name) {
-  const pre = prefixOf() + name + '/'; const [w, p] = where();
-  const r = q(`SELECT kind FROM files WHERE substr(path,1,?) = ? ${w} GROUP BY kind ORDER BY SUM(size) DESC LIMIT 1`, [pre.length, pre, ...p]);
-  return r.length ? r[0].kind : 'other';
+  const pre = prefixOf(); const [w, p] = where(pre);
+  const rows = q(`SELECT name, kind, SUM(size) s FROM (
+      SELECT kind, size, substr(seg, 1, instr(seg,'/')-1) name FROM (SELECT kind, size, substr(path, ?) seg FROM files WHERE ${w}) WHERE instr(seg,'/')>0)
+    GROUP BY name, kind`, [pre.length + 1, ...p]);
+  if (domCache.rows !== rows) {
+    const by = {}; rows.forEach(r => { if (!by[r.name] || r.s > by[r.name].s) by[r.name] = r; });
+    domCache = { rows, by };
+  }
+  return (domCache.by[name] || {}).kind || 'other';
 }
 function squarify(items, x, y, w, h) { // items sorted by value, descending
   const out = []; const total = items.reduce((s, i) => s + i.v, 0); if (!total) return out;
@@ -702,10 +764,10 @@ function sourceRows() { // with several disks, the first level is the disk itsel
 let galleryLimit = 120, galleryScope = '';
 const GAL_SORT = { 'size-desc': ['size', -1, 'Largest first'], 'mtime-desc': ['mtime', -1, 'Newest first'], 'mtime-asc': ['mtime', 1, 'Oldest first'], 'name-asc': ['name', 1, 'Name'] };
 function renderGallery() {
-  const [w, p] = where(false), pre = prefixOf();
+  const pre = prefixOf(), [w, p] = where(pre, false);
   const scope = [state.source, state.prefix, state.kind].join('|'); if (scope !== galleryScope) { galleryScope = scope; galleryLimit = 120; }
   const kinds = state.kind === 'photo' || state.kind === 'video' ? [state.kind] : ['photo', 'video'];
-  const base = `FROM files WHERE substr(path,1,?) = ? AND kind IN (${kinds.map(() => '?').join(',')}) ${w}`, bp = [pre.length, pre, ...kinds, ...p];
+  const base = `FROM files WHERE ${w} AND +kind IN (${kinds.map(() => '?').join(',')})`, bp = [...p, ...kinds];
   const total = q('SELECT COUNT(*) n ' + base, bp)[0].n;
   const col = { name: 'name COLLATE NOCASE', size: 'size', mtime: 'mtime' }[state.sort] || 'size';
   const rows = q(`SELECT source_id sid, path, size, mtime, kind ${base} ORDER BY ${col} ${state.dir > 0 ? 'ASC' : 'DESC'}, path LIMIT ?`, [...bp, galleryLimit]);
@@ -726,9 +788,9 @@ function renderGallery() {
   const ga = $('#gselall'); if (ga) ga.onclick = () => { $('#gallery').querySelectorAll('input.sel').forEach(x => { x.checked = true; sel.set(mkey(x.dataset.sid, x.dataset.p), { sid: +x.dataset.sid, path: x.dataset.p }); }); updateSelbar(); };
 }
 function fileListHtml(bySource) {
-  const [w, p] = where(), pre = prefixOf(), multi = sources.length > 1;
+  const pre = prefixOf(), [w, p] = where(pre), multi = sources.length > 1;
   const col = { name: 'name COLLATE NOCASE', size: 'size', mtime: 'mtime' }[state.sort] || 'size';
-  const rows = q(`SELECT source_id sid, path, size, mtime, kind FROM files WHERE substr(path,1,?) = ? ${w} ORDER BY ${col} ${state.dir > 0 ? 'ASC' : 'DESC'}, path LIMIT 300`, [pre.length, pre, ...p]);
+  const rows = q(`SELECT source_id sid, path, size, mtime, kind FROM files WHERE ${w} ORDER BY ${col} ${state.dir > 0 ? 'ASC' : 'DESC'}, path LIMIT 300`, p);
   if (!rows.length) return '<tr><td class="muted">Nothing to show with these filters.</td></tr>';
   const th = (k, label, cls = '') => `<th class="sortable ${cls}" data-sort="${k}" aria-sort="${state.sort === k ? (state.dir > 0 ? 'ascending' : 'descending') : 'none'}">${label}${state.sort === k ? (state.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
   return '<tr>' + selHead + th('name', 'File') + '<th>Type</th>' + th('size', 'Size', 'num') + th('mtime', 'Modified') + '<th>Does it spark joy?</th></tr>' +
@@ -791,7 +853,7 @@ let stimer;
 $('#q').oninput = () => { clearTimeout(stimer); stimer = setTimeout(runSearch, 250); };
 $('#sscope').onchange = $('#skind').onchange = runSearch;
 const ftsQuery = s => s.split(/\s+/).filter(Boolean).map(t => '"' + t.replace(/"/g, '""') + '"*').join(' ');
-let searchSeq = 0;
+let searchSeq = 0, searchCache = {};
 async function runSearch() {
   const term = $('#q').value.trim(), scope = $('#sscope').value, kind = $('#skind').value;
   if (term.length < 2) { $('#sinfo').textContent = 'Type at least two characters.'; $('#results').innerHTML = ''; return; }
@@ -811,7 +873,8 @@ async function runSearch() {
     } else if (actions) {            // the server searches the text of every disk
       try {
         const label = state.source === 'all' ? '' : ((sources.find(s => s.id === +state.source) || {}).label || '');
-        const j = await api('api/search?' + new URLSearchParams({ q: term, kind, source: label }));
+        const u = 'api/search?' + new URLSearchParams({ q: term, kind, source: label });
+        const j = searchCache[u] || (searchCache = { [u]: await api(u) })[u]; // a click on an answer redraws without asking again
         j.rows.forEach(h => { const s = sources.find(x => x.label === h.source); if (s) rows.push({ sid: s.id, path: h.path, size: h.size, kind: h.kind, how: h.how }); });
       } catch (e) { note = ' Searching inside files failed: ' + e.message; }
     } else { note = ' To search inside files, start Sidecar with open-sidecar.'; }
@@ -869,7 +932,8 @@ $('#cmp-go').onclick = runCmp;
 function side(name, sid, prefix) {
   const pre = prefix ? prefix.replace(/^\/+|\/+$/g, '') + '/' : '';
   db.exec(`DROP TABLE IF EXISTS tmp_${name}`);
-  db.run(`CREATE TEMP TABLE tmp_${name} AS SELECT COALESCE(sha256, name || '|' || size) k, path, size, source_id sid FROM files WHERE source_id = ? AND substr(path,1,?) = ?`, [sid, pre.length, pre]);
+  db.run(`CREATE TEMP TABLE tmp_${name} AS SELECT COALESCE(sha256, name || '|' || size) k, path, size, source_id sid FROM files WHERE source_id = ?` +
+    (pre ? ' AND path >= ? AND path < ?' : ''), pre ? [sid, pre, pre.slice(0, -1) + '0'] : [sid]);
   db.run(`CREATE INDEX tmp_${name}_k ON tmp_${name}(k)`);
   return pre;
 }
@@ -909,7 +973,9 @@ function markRows() {
     return { sid, path: p, mark: m, source: (sources.find(s => s.id === sid) || {}).label || sid }; });
 }
 function sizeOf(sid, p) {
-  return q('SELECT COALESCE(SUM(size),0) s, COUNT(*) n FROM files WHERE source_id = ? AND (path = ? OR substr(path,1,?) = ?)', [sid, p, p.length + 1, p + '/'])[0];
+  return q(`SELECT COALESCE(SUM(s),0) s, COALESCE(SUM(n),0) n FROM (
+      SELECT SUM(size) s, COUNT(*) n FROM files WHERE source_id = ? AND path = ?
+      UNION ALL SELECT SUM(size), COUNT(*) FROM files WHERE source_id = ? AND path >= ? AND path < ?)`, [sid, p, sid, p + '/', p + '0'])[0];
 }
 function renderMarks() {
   const rows = markRows(); let del = 0;
@@ -1168,8 +1234,17 @@ async function pollNewDisks() {
     }
     if (!disks.length) { offered = null; $('#newdisk').classList.add('hide'); return; }
     if (!offered || !disks.some(x => x.path === offered.path)) showOffer(disks[0]);
-  } catch (e) {}
+  } catch (e) {
+    // no answer: Sidecar was stopped (Ctrl+C, the Terminal closed, unused for a while). A token the
+    // server no longer knows: another one was started meanwhile, so this page reloads into it.
+    if (/missing token/.test(e.message)) return location.reload();
+    if (e instanceof TypeError) {
+      if (!serverGone) { serverGone = true; $('#vstatus').textContent = 'Sidecar has stopped. Double click Open Sidecar to start it again; this page reconnects by itself.'; }
+      try { if ((await fetch('catalog.html', { cache: 'no-store' })).ok) location.reload(); } catch (x) {}
+    }
+  }
 }
+let serverGone = false;
 async function dismissOffer(forever) {
   const d = offered; offered = null; $('#newdisk').classList.add('hide');
   try { await api('api/disk/ignore', { path: d.path, forever }); } catch (e) {}

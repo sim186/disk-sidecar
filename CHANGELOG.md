@@ -4,8 +4,25 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
-## Unreleased
+## 0.9.0
 
+- Sidecar ends cleanly in every case. Closing the Terminal window now stops it like Ctrl+C (before, its copy
+  of the catalog, up to gigabytes, stayed in the temporary folder); a second Ctrl+C stops it at once. It stops by
+  itself after 30 minutes with no page open and nothing running (`--idle-exit`), and the page says so. Opening
+  Sidecar while an older build still runs replaces it (unless it is busy copying or checking) instead of failing on
+  the port; the same build simply opens the page. Copies left by a killed server are removed at the next start.
+- A thin bar along the top of the page shows when it is waiting for the server (searching, saving, loading the catalog).
+- Faster on big disks. A click on Keep, Not sure or Let go no longer asks the catalog again: the page keeps what it
+  read until the catalog is reloaded, so a click redraws in a few milliseconds instead of up to a second (more on a
+  big disk). Opening a folder reads only that folder, not the whole disk, the colour of each folder on the map comes
+  from one query instead of one per folder, and the tidying piles count the size of each answer through the index
+  (300 answers: 11 s before, under 0.1 s now). Reloading the catalog frees the previous copy's memory.
+- A click while the check at start is rewriting the index no longer waits for it: the check commits at least every
+  0.2 s and takes turns with clicks. The clean-up of text in library folders runs once instead of at every check.
+- The page's copy of the catalog takes new answers in place instead of being rebuilt, and answers no longer wait for
+  a copy or a check to finish.
+- Developers: a performance harness (`SIDECAR_PERF=1 go test ./tests -run TestPerf -v`) times the server and the page
+  in headless Chrome on a fake disk of 100,000 files, with a budget per measure. See README, Development.
 - Copying from a phone follows the same rules as copying between disks: it refuses a destination folder that is a
   symbolic link, and if one of several chosen items fails, the items already copied are kept (and listed in the
   catalog) instead of being removed too.

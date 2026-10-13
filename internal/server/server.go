@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/sim186/disk-sidecar/internal/assets"
@@ -36,8 +37,9 @@ type Config struct {
 	NoDefaultMounts bool
 	NoOpen          bool
 	NoVerify        bool
-	NoWatch         bool // do not offer to set up disks plugged in while running
-	NoUpdateCheck   bool // do not ask GitHub whether a newer release exists
+	NoWatch         bool          // do not offer to set up disks plugged in while running
+	NoUpdateCheck   bool          // do not ask GitHub whether a newer release exists
+	IdleExit        time.Duration // stop once no page has asked anything for this long (0 = never)
 }
 
 // Server holds the state of a running server.
@@ -46,6 +48,7 @@ type Server struct {
 	token      string
 	gen        atomic.Int64 // bumped after every change we make, to refresh the page's copy
 	opMu       sync.Mutex   // one writing action at a time
+	dbw        sync.Mutex   // one write transaction at a time on the disks' indexes: a check running takes turns with clicks
 	jt         jobTable
 	startupJob string
 	lastVerify atomic.Pointer[map[string]any]
@@ -59,16 +62,50 @@ type Server struct {
 	cat        *catalog.Catalog
 	catGen     int64
 	catAt      time.Time
+	started    time.Time
+	lastSeen   atomic.Int64 // when someone last asked something, as time since started
+	quit       chan struct{}
+	quitOnce   sync.Once
 }
 
 // Run starts the server and blocks until interrupted.
 func Run(cfg Config, out io.Writer) error {
-	s := &Server{cfg: cfg, token: newToken(24), jt: jobTable{jobs: map[string]*Job{}}, watch: newWatcher(), upd: newUpdater()}
-	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", cfg.Port))
-	if err != nil {
-		return fmt.Errorf("cannot listen on port %d: %w (is Sidecar already running?)", cfg.Port, err)
-	}
+	s := &Server{cfg: cfg, token: newToken(24), jt: jobTable{jobs: map[string]*Job{}}, watch: newWatcher(), upd: newUpdater(),
+		started: time.Now(), quit: make(chan struct{})}
 	url := fmt.Sprintf("http://127.0.0.1:%d/catalog.html", cfg.Port)
+	addr := fmt.Sprintf("127.0.0.1:%d", cfg.Port)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		// another Sidecar has the port: the same program is simply opened again; an older one (a
+		// disk updated while it ran) is asked to make way, unless it is in the middle of something
+		o := findOther(cfg.Port)
+		if o == nil {
+			return fmt.Errorf("cannot listen on port %d: %w (another program uses it)", cfg.Port, err)
+		}
+		openIt := func(why string) error {
+			fmt.Fprintf(out, "Sidecar is already running%s: %s\n", why, url)
+			if !cfg.NoOpen {
+				openBrowser(url)
+			}
+			return nil
+		}
+		if o.build == build() {
+			return openIt("")
+		}
+		if qerr := o.askToQuit(); qerr != nil {
+			return openIt(" (an older one, which could not stop: " + qerr.Error() + ")")
+		}
+		fmt.Fprintln(out, "Stopped the older Sidecar that was running.")
+		for i := 0; i < 50; i++ {
+			if ln, err = net.Listen("tcp", addr); err == nil {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if err != nil {
+			return fmt.Errorf("cannot listen on port %d: %w", cfg.Port, err)
+		}
+	}
 	cat := s.catalog()
 	disks := cat.Disks()
 	fmt.Fprintf(out, "Sidecar %s: %s\n", assets.Version, url)
@@ -84,6 +121,7 @@ func Run(cfg Config, out io.Writer) error {
 			s.startupJob = j.id
 		}
 	}
+	go sweepOldTemps()
 	go s.checkUpdates()
 	if !cfg.NoWatch {
 		go s.watchDisks()
@@ -91,23 +129,39 @@ func Run(cfg Config, out io.Writer) error {
 	if !cfg.NoOpen {
 		time.AfterFunc(800*time.Millisecond, func() { openBrowser(url) })
 	}
-	srv := &http.Server{Handler: s}
-	idle := make(chan struct{})
-	go func() {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
-		<-c
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		srv.Shutdown(ctx)
-		close(idle)
-	}()
-	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
-		return err
+	if cfg.IdleExit > 0 {
+		go s.watchIdle(out)
 	}
-	<-idle
+	// Ctrl+C, a Terminal window closed (SIGHUP) or the system stopping: end cleanly. A second
+	// Ctrl+C ends at once, for when something does not let go.
+	go func() {
+		c := make(chan os.Signal, 2)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+		<-c
+		s.stop()
+		<-c
+		if s.tmp != "" {
+			os.RemoveAll(s.tmp)
+		}
+		os.Exit(1)
+	}()
+	srv := &http.Server{Handler: s}
+	served := make(chan error, 1)
+	go func() { served <- srv.Serve(ln) }()
+	var err2 error
+	select {
+	case err2 = <-served:
+	case <-s.quit:
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		srv.Shutdown(ctx) // lets a running request finish, for a moment
+		cancel()
+	}
+	s.idxMu.Lock() // a copy being built finishes or never starts before its folder goes
 	if s.tmp != "" {
 		os.RemoveAll(s.tmp)
+	}
+	if err2 != nil && err2 != http.ErrServerClosed {
+		return err2
 	}
 	return nil
 }
@@ -166,6 +220,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 403, map[string]string{"error": "host not allowed"})
 		return
 	}
+	s.seen()
 	p := r.URL.Path
 	if r.Method == http.MethodPost {
 		s.post(w, r, p)
@@ -276,14 +331,21 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 			bad(err)
 			return
 		}
-		s.opMu.Lock()
+		// no opMu: a mark is one tiny transaction (SQLite's busy timeout covers a scan committing in
+		// batches), and waiting for a running verify or copy would stall the click for minutes
 		res, err := s.doMarks(d.Items)
-		s.opMu.Unlock()
 		if err != nil {
 			fail(w, err)
 			return
 		}
 		writeJSON(w, 200, res)
+	case "/api/quit": // a newer Sidecar wants the port
+		if s.busy() {
+			fail(w, refuse("Sidecar is busy with a long action: wait for it to finish"))
+			return
+		}
+		writeJSON(w, 200, map[string]string{"stopping": "yes"})
+		go func() { time.Sleep(100 * time.Millisecond); s.stop() }()
 	case "/api/restore":
 		var d struct {
 			ID string `json:"id"`
@@ -292,7 +354,10 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 			writeJSON(w, 400, map[string]string{"error": "invalid request: missing id"})
 			return
 		}
-		s.opMu.Lock()
+		if !s.opMu.TryLock() {
+			fail(w, refuse("another operation is still running: wait for it to finish"))
+			return
+		}
 		res, err := s.box(nil).Restore(d.ID)
 		s.opMu.Unlock()
 		if err != nil {

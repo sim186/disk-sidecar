@@ -130,6 +130,22 @@ func count(t *testing.T, db, q string, args ...any) int {
 	return int(r[0][0].(int64))
 }
 
+// stopServer ends a server the way Ctrl+C does, so that it removes its copy of the catalog from the
+// temporary folder; it kills it only if it does not end.
+func stopServer(cmd *exec.Cmd) {
+	if runtime.GOOS != "windows" && cmd.Process.Signal(os.Interrupt) == nil {
+		done := make(chan struct{})
+		go func() { cmd.Wait(); close(done) }()
+		select {
+		case <-done:
+			return
+		case <-time.After(10 * time.Second):
+		}
+	}
+	cmd.Process.Kill()
+	cmd.Wait()
+}
+
 func exists(p string) bool { _, err := os.Stat(p); return err == nil }
 
 func tempDir(t *testing.T) string { return t.TempDir() }
@@ -385,7 +401,7 @@ func newServerHome(t *testing.T, home string) *srv {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
+	t.Cleanup(func() { stopServer(cmd) })
 	s.base = fmt.Sprintf("http://127.0.0.1:%d", s.port)
 	var html string
 	for i := 0; i < 100; i++ {
@@ -822,7 +838,7 @@ func TestServerUpdateNoticeAndInstallOnADisk(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
+	t.Cleanup(func() { stopServer(cmd) })
 	s := &srv{t: t, port: port, base: fmt.Sprintf("http://127.0.0.1:%d", port)}
 	var html string
 	for i := 0; i < 100 && html == ""; i++ {

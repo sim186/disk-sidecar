@@ -31,6 +31,7 @@ func (s *Server) doMarks(items []markItem) (any, error) {
 		note *string
 	}
 	groups := map[string][]mk{}
+	var patch []markPatch
 	for _, it := range items {
 		src, err := cat.Get(it.Source)
 		if err != nil {
@@ -47,31 +48,41 @@ func (s *Server) doMarks(items []markItem) (any, error) {
 			return nil, refuse("invalid mark: %q", *it.Mark)
 		}
 		groups[src.DB] = append(groups[src.DB], mk{src.SID, rel, it.Mark, it.Note})
+		patch = append(patch, markPatch{src.Label, rel, it.Mark, it.Note})
 	}
+	fresh := s.cacheCurrent() // the page's copy can take the new marks without a rebuild
 	for dbPath, rows := range groups {
 		db, err := idx.Open(dbPath)
 		if err != nil {
 			return nil, err
 		}
+		s.dbw.Lock()
 		tx, err := db.Begin()
 		if err != nil {
+			s.dbw.Unlock()
 			db.Close()
 			return nil, err
 		}
 		for _, r := range rows {
 			if err := idx.SetMark(tx, r.sid, r.rel, r.mark, r.note); err != nil {
 				tx.Rollback()
+				s.dbw.Unlock()
 				db.Close()
 				return nil, err
 			}
 		}
 		err = tx.Commit()
+		s.dbw.Unlock()
 		db.Close()
 		if err != nil {
 			return nil, err
 		}
 	}
-	s.gen.Add(1)
+	if fresh {
+		s.patchMarks(patch)
+	} else {
+		s.gen.Add(1)
+	}
 	return map[string]any{"saved": len(items)}, nil
 }
 
@@ -112,7 +123,7 @@ func (s *Server) verify(job *Job, withHome bool) (any, error) {
 		if job != nil {
 			job.Update("Checking "+src.Label+"…", 0, hint)
 		}
-		st, err := scan.Run(scan.Options{Root: src.Root, DB: src.DB, Label: src.Raw, Host: host, HashMin: -1, Text: !home,
+		st, err := scan.Run(scan.Options{Root: src.Root, DB: src.DB, Label: src.Raw, Host: host, HashMin: -1, Text: !home, WriteLock: &s.dbw,
 			Progress: func(n int) {
 				if job != nil {
 					job.SetDone(int64(n))
@@ -171,7 +182,7 @@ func (s *Server) state() map[string]any {
 	if warnings == nil {
 		warnings = []string{}
 	}
-	return map[string]any{"actions": true, "version": assets.Version, "quarantine": farewell.Box{Catalog: cat}.Contents(),
+	return map[string]any{"actions": true, "version": assets.Version, "build": build(), "quarantine": farewell.Box{Catalog: cat}.Contents(),
 		"sources": out, "startup_job": startup, "verify": verify, "warnings": warnings}
 }
 

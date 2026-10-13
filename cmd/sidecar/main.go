@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/sim186/disk-sidecar/internal/assets"
 	"github.com/sim186/disk-sidecar/internal/hashdups"
@@ -197,6 +198,7 @@ func main() {
 		fs.BoolVar(&cfg.NoUpdateCheck, "no-update-check", false, "do not ask GitHub whether a newer release exists (or set SIDECAR_NO_UPDATE_CHECK=1)")
 		fs.BoolVar(&cfg.NoWatch, "no-watch", false, "do not offer to set up disks plugged in while running")
 		fs.BoolVar(&cfg.NoDefaultMounts, "no-default-mounts", false, "do not look in /Volumes, /media, /mnt (testing)")
+		fs.DurationVar(&cfg.IdleExit, "idle-exit", 30*time.Minute, "stop once no page has been open for this long (0 = never)")
 		parse(fs, args)
 		cfg.Mounts = mounts
 		if err := server.Run(cfg, os.Stdout); err != nil {

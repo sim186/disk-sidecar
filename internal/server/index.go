@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,7 +20,32 @@ func (s *Server) indexFile() (string, error) {
 	s.idxMu.Lock()
 	defer s.idxMu.Unlock()
 	cat := s.catalog()
-	srcs := cat.Sources()
+	sig, err := s.indexSig(cat)
+	if err != nil {
+		return "", err
+	}
+	if s.cachePath != "" && s.cacheSig == sig {
+		if _, err := os.Stat(s.cachePath); err == nil {
+			return s.cachePath, nil
+		}
+	}
+	tmp, err := s.tempDir()
+	if err != nil {
+		return "", err
+	}
+	dest := filepath.Join(tmp, fmt.Sprintf("index-%d.db", time.Now().UnixNano()))
+	if err := buildCombined(cat.Sources(), dest); err != nil {
+		return "", err
+	}
+	if s.cachePath != "" {
+		os.Remove(s.cachePath)
+	}
+	s.cachePath, s.cacheSig = dest, sig
+	return dest, nil
+}
+
+// indexSig identifies the state of the disks' indexes plus our own change counter.
+func (s *Server) indexSig(cat *catalog.Catalog) (string, error) {
 	dbs := cat.Indexes()
 	sort.Strings(dbs)
 	if len(dbs) == 0 {
@@ -34,27 +60,67 @@ func (s *Server) indexFile() (string, error) {
 		}
 		fmt.Fprintf(&sig, "|%s:%d:%d", p, st.ModTime().UnixNano(), st.Size())
 	}
-	if s.cachePath != "" && s.cacheSig == sig.String() {
-		if _, err := os.Stat(s.cachePath); err == nil {
-			return s.cachePath, nil
+	return sig.String(), nil
+}
+
+type markPatch struct {
+	label, path string
+	mark, note  *string
+}
+
+// cacheCurrent reports whether the cached copy matches the disks right now.
+func (s *Server) cacheCurrent() bool {
+	s.idxMu.Lock()
+	defer s.idxMu.Unlock()
+	if s.cachePath == "" {
+		return false
+	}
+	sig, err := s.indexSig(s.catalog())
+	return err == nil && sig == s.cacheSig
+}
+
+// patchMarks applies saved marks to the cached copy, so the next page load needs no rebuild of a
+// copy that can be hundreds of megabytes. On any trouble the copy is dropped and rebuilt later.
+func (s *Server) patchMarks(rows []markPatch) {
+	s.idxMu.Lock()
+	defer s.idxMu.Unlock()
+	if s.cachePath == "" {
+		return
+	}
+	drop := func() { os.Remove(s.cachePath); s.cachePath, s.cacheSig = "", "" }
+	db, err := sql.Open("sqlite", idx.FileURI(s.cachePath, "_pragma=busy_timeout(30000)"))
+	if err != nil {
+		drop()
+		return
+	}
+	defer db.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		drop()
+		return
+	}
+	for _, r := range rows {
+		var sid int64
+		if err := tx.QueryRow(`SELECT id FROM sources WHERE label=?`, r.label).Scan(&sid); err != nil {
+			tx.Rollback()
+			drop()
+			return
+		}
+		if err := idx.SetMark(tx, sid, r.path, r.mark, r.note); err != nil {
+			tx.Rollback()
+			drop()
+			return
 		}
 	}
-	if s.tmp == "" {
-		d, err := os.MkdirTemp("", "sidecar-")
-		if err != nil {
-			return "", err
-		}
-		s.tmp = d
+	if tx.Commit() != nil {
+		drop()
+		return
 	}
-	dest := filepath.Join(s.tmp, fmt.Sprintf("index-%d.db", time.Now().UnixNano()))
-	if err := buildCombined(srcs, dest); err != nil {
-		return "", err
+	if sig, err := s.indexSig(s.catalog()); err == nil {
+		s.cacheSig = sig
+	} else {
+		drop()
 	}
-	if s.cachePath != "" {
-		os.Remove(s.cachePath)
-	}
-	s.cachePath, s.cacheSig = dest, sig.String()
-	return dest, nil
 }
 
 func buildCombined(srcs []*catalog.Source, dest string) error {
