@@ -82,3 +82,19 @@ func TestCleanRel(t *testing.T) {
 		}
 	}
 }
+
+func TestInsideThroughALinkedFolder(t *testing.T) {
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link") // like /var -> /private/var on macOS
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip("no symbolic links here")
+	}
+	os.MkdirAll(filepath.Join(real, "disk"), 0o755)
+	root := filepath.Join(link, "disk")
+	if !Inside(root, filepath.Join(root, "missing.txt")) || !Inside(root, filepath.Join(root, "new", "dir")) {
+		t.Fatal("a path that does not exist yet counted as outside its disk")
+	}
+	if Inside(root, filepath.Join(root, "..", "other")) {
+		t.Fatal("escaped the disk")
+	}
+}

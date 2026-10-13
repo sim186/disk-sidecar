@@ -27,12 +27,17 @@ func CleanRel(rel string) (string, error) {
 	return rel, nil
 }
 
-// Realpath resolves links; a path that does not exist is only made absolute.
+// Realpath resolves links. For a path that does not exist (yet), the part that does is resolved,
+// so /var/x/missing on macOS becomes /private/var/x/missing like its folder.
 func Realpath(p string) string {
 	if r, err := filepath.EvalSymlinks(p); err == nil {
 		return r
 	}
 	a, _ := filepath.Abs(p)
+	anc, below := ExistingAncestor(a)
+	if r, err := filepath.EvalSymlinks(anc); err == nil {
+		return filepath.Join(r, below)
+	}
 	return a
 }
 
