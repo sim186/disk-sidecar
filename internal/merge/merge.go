@@ -99,33 +99,20 @@ func Run(o Options) error {
 		var nIn int
 		var sIn int64
 		tx.QueryRow(`SELECT COUNT(*), COALESCE(SUM(size),0) FROM o.files WHERE source_id=?`, s.id).Scan(&nIn, &sIn)
-		var sid int64
-		action := "add"
-		if err := tx.QueryRow(`SELECT id FROM sources WHERE label=?`, label).Scan(&sid); err == nil {
-			action = "replace"
-			tx.Exec(`DELETE FROM file_text WHERE rowid IN (SELECT id FROM files WHERE source_id=?)`, sid)
-			tx.Exec(`DELETE FROM files WHERE source_id=?`, sid)
-			tx.Exec(`UPDATE sources SET root=?, host=?, scanned_at=? WHERE id=?`, s.root, s.host, s.scannedAt, sid)
-		} else {
-			res, err := tx.Exec(`INSERT INTO sources(label, root, host, scanned_at) VALUES (?,?,?,?)`, label, s.root, s.host, s.scannedAt)
-			if err != nil {
-				tx.Rollback()
-				return err
-			}
-			sid, _ = res.LastInsertId()
-		}
-		logf("%-8s '%s' <- '%s': %d files, %.1f GB", action, label, s.label, nIn, float64(sIn)/1e9)
-		if _, err := tx.Exec(`INSERT INTO files(source_id, path, name, ext, size, mtime, kind, top, sha256, seen)
-			SELECT ?, path, name, ext, size, mtime, kind, top, sha256, 1 FROM o.files WHERE source_id=?`, sid, s.id); err != nil {
+		sid, replaced, err := idx.ReplaceSource(tx, label, s.root, s.host, s.scannedAt)
+		if err != nil {
 			tx.Rollback()
 			return err
 		}
-		res, err := tx.Exec(`INSERT INTO file_text(rowid, path, body)
-			SELECT m.id, t.path, t.body FROM o.file_text t JOIN o.files sf ON sf.id = t.rowid
-			JOIN files m ON m.source_id = ? AND m.path = sf.path WHERE sf.source_id = ?`, sid, s.id)
-		n := int64(0)
-		if err == nil {
-			n, _ = res.RowsAffected()
+		action := "add"
+		if replaced {
+			action = "replace"
+		}
+		logf("%-8s '%s' <- '%s': %d files, %.1f GB", action, label, s.label, nIn, float64(sIn)/1e9)
+		n, err := idx.CopySource(tx, "o", s.id, sid, true)
+		if err != nil {
+			tx.Rollback()
+			return err
 		}
 		logf("         text of %d files imported", n)
 	}

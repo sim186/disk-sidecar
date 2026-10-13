@@ -56,8 +56,6 @@ func (s *Server) phoneDevice(label string) (*Src, phone.Device, error) {
 	return nil, phone.Device{}, refuse("unknown source: %s", label)
 }
 
-var likeEsc = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-
 // phoneRows returns the files held by the items (a file, or a folder and all that is inside).
 // folder[rel] tells which items were folders.
 func phoneRows(db *sql.DB, sid int64, items []qItem) (rows []prow, itemOf map[int64]string, folder map[string]bool, err error) {
@@ -69,7 +67,7 @@ func phoneRows(db *sql.DB, sid int64, items []qItem) (rows []prow, itemOf map[in
 			return nil, nil, nil, err
 		}
 		rs, err := db.Query(`SELECT id, path, size, mtime, sha256 FROM files WHERE source_id=? AND (path=? OR path LIKE ? ESCAPE '\')`,
-			sid, rel, likeEsc.Replace(rel)+"/%")
+			sid, rel, idx.LikePrefix(rel))
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -236,29 +234,24 @@ func (s *Server) doPhoneCopy(req copyReq, job *Job) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		fw, err := idx.NewFileWriter(tx, dst.SID)
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
 		for _, c := range byItem[it] {
-			name := path.Base(c.rel)
-			ext := ""
-			if i := strings.LastIndex(name, "."); i > 0 {
-				ext = strings.ToLower(name[i+1:])
-			}
-			top := ""
-			if i := strings.Index(c.rel, "/"); i >= 0 {
-				top = c.rel[:i]
-			}
-			if _, err := tx.Exec(`INSERT INTO files(source_id,path,name,ext,size,mtime,kind,top,sha256,seen) VALUES (?,?,?,?,?,?,?,?,?,1)
-				ON CONFLICT(source_id,path) DO UPDATE SET size=excluded.size, mtime=excluded.mtime, kind=excluded.kind,
-				top=excluded.top, sha256=excluded.sha256, seen=1`,
-				dst.SID, c.rel, name, ext, c.r.size, c.r.mtime, idx.KindOf(ext), top, c.sha); err != nil {
+			if _, err := fw.Put(c.rel, c.r.size, c.r.mtime, sql.NullString{String: c.sha, Valid: true}); err != nil {
+				fw.Close()
 				tx.Rollback()
 				return nil, fmt.Errorf("the files were copied but the index was not updated (%v); use Check now", err)
 			}
 		}
+		fw.Close()
 		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
 		for _, c := range byItem[it] { // the phone's file now has a proven hash: a copy exists
-			pdb.Exec(`UPDATE files SET sha256=? WHERE id=?`, c.sha, c.r.id)
+			idx.SetHash(pdb, c.r.id, c.sha)
 			nbytes += c.r.size
 			nfiles++
 		}
@@ -439,8 +432,7 @@ func (s *Server) doPhoneRelease(items []qItem, confirm string, dry bool, job *Jo
 		if err := phone.Remove(dev.Serial, remote); err != nil {
 			return nil, refuse("%v. Released so far: %d files.", err, nfree)
 		}
-		pdb.Exec(`DELETE FROM file_text WHERE rowid=?`, r.id)
-		pdb.Exec(`DELETE FROM files WHERE id=?`, r.id)
+		idx.RemoveFile(pdb, r.id)
 		nfree++
 		freed += r.size
 	}

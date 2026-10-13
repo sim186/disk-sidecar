@@ -60,9 +60,9 @@ CREATE TABLE IF NOT EXISTS scan_log (
     removed INTEGER, errors INTEGER, secs REAL);
 `
 
-// CombinedDDL is the layout of the temporary index the page receives: no quarantine, log or text
+// combinedDDL is the layout of the temporary index the page receives: no quarantine, log or text
 // tables, plus two columns on sources.
-const CombinedDDL = `
+const combinedDDL = `
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE sources (id INTEGER PRIMARY KEY, label TEXT UNIQUE NOT NULL, root TEXT, host TEXT, scanned_at INTEGER,
     kind TEXT, disk_id TEXT);

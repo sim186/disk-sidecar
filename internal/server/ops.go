@@ -130,13 +130,7 @@ func (s *Server) doMarks(items []markItem) (any, error) {
 			return nil, err
 		}
 		for _, r := range rows {
-			if r.mark == nil {
-				_, err = tx.Exec(`DELETE FROM marks WHERE source_id=? AND path=?`, r.sid, r.rel)
-			} else {
-				_, err = tx.Exec(`INSERT INTO marks(source_id, path, mark, note) VALUES (?,?,?,?)
-					ON CONFLICT(source_id, path) DO UPDATE SET mark=excluded.mark, note=excluded.note`, r.sid, r.rel, *r.mark, r.note)
-			}
-			if err != nil {
+			if err := idx.SetMark(tx, r.sid, r.rel, r.mark, r.note); err != nil {
 				tx.Rollback()
 				db.Close()
 				return nil, err
@@ -519,48 +513,20 @@ func (s *Server) doQuarantine(items []qItem, job *Job) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		isDir := 0
-		if m.isDir {
-			isDir = 1
+		ids := make([]int64, len(m.rows))
+		for i, r := range m.rows {
+			ids[i] = r.id
 		}
-		res, err := tx.Exec(`INSERT INTO quarantine_moves(batch, source_id, path, qpath, is_dir, nfiles, size, moved_at) VALUES (?,?,?,?,?,?,?,?)`,
-			batch, m.sid, m.rel, qrel, isDir, len(m.rows), size, time.Now().Unix())
-		if err != nil {
-			tx.Rollback()
-			return nil, err
-		}
-		mid, _ := res.LastInsertId()
-		for i := 0; i < len(m.rows); i += 500 {
-			chunk := m.rows[i:min(i+500, len(m.rows))]
-			ids := make([]any, len(chunk))
-			for j, r := range chunk {
-				ids[j] = r.id
-			}
-			ph := placeholders(len(chunk))
-			for _, q := range []string{
-				`INSERT INTO quarantine_files SELECT ?, path, name, ext, size, mtime, kind, top, sha256 FROM files WHERE id IN (` + ph + `)`,
-				`DELETE FROM file_text WHERE rowid IN (` + ph + `)`,
-				`DELETE FROM files WHERE id IN (` + ph + `)`,
-			} {
-				args := ids
-				if strings.HasPrefix(q, "INSERT") {
-					args = append([]any{mid}, ids...)
-				}
-				if _, err := tx.Exec(q, args...); err != nil {
-					tx.Rollback()
-					return nil, err
-				}
-			}
-			if job != nil {
-				job.Advance(int64(len(chunk)))
-			}
-		}
-		if _, err := tx.Exec(`DELETE FROM marks WHERE source_id=? AND (path=? OR substr(path,1,?)=?)`, m.sid, m.rel, len(m.rel)+1, m.rel+"/"); err != nil {
+		if err := idx.RecordMove(tx, idx.Move{Batch: batch, SID: m.sid, Path: m.rel, QPath: qrel, IsDir: m.isDir,
+			Files: len(m.rows), Size: size, MovedAt: time.Now().Unix()}, ids); err != nil {
 			tx.Rollback()
 			return nil, err
 		}
 		if err := tx.Commit(); err != nil {
 			return nil, err
+		}
+		if job != nil {
+			job.Advance(int64(len(m.rows)))
 		}
 		s.logAction(m.disk, "quarantine", m.label, m.rel, len(m.rows), size)
 		done++
@@ -688,16 +654,10 @@ func (s *Server) doRestore(moveID string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, q := range []string{
-		`INSERT OR IGNORE INTO files(source_id, path, name, ext, size, mtime, kind, top, sha256, seen) SELECT ?, path, name, ext, size, mtime, kind, top, sha256, 1 FROM quarantine_files WHERE move_id=?`,
-	} {
-		if _, err := tx.Exec(q, sid, id); err != nil {
-			tx.Rollback()
-			return nil, err
-		}
+	if err := idx.RecordRestore(tx, idx.Move{ID: id, SID: sid}); err != nil {
+		tx.Rollback()
+		return nil, err
 	}
-	tx.Exec(`DELETE FROM quarantine_files WHERE move_id=?`, id)
-	tx.Exec(`UPDATE quarantine_moves SET state='restored' WHERE id=?`, id)
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -800,8 +760,7 @@ func (s *Server) doEmpty(confirm string, job *Job) (any, error) {
 				continue
 			}
 			rmTree(filepath.Join(src.Root, filepath.FromSlash(m.qpath)), job)
-			h.db.Exec(`DELETE FROM quarantine_files WHERE move_id=?`, m.id)
-			h.db.Exec(`UPDATE quarantine_moves SET state='deleted' WHERE id=?`, m.id)
+			idx.RecordDeleted(h.db, m.id)
 			s.logAction(h.d, "delete", src.Label, m.qpath, 0, m.size)
 			freed += m.size
 			count++
@@ -862,7 +821,7 @@ func (s *Server) verify(job *Job, withHome bool) (any, error) {
 			return nil, err
 		}
 		if db, err := idx.Open(src.DB); err == nil {
-			db.Exec(`INSERT INTO scan_log VALUES (?,?,?,?,?,?,?,?)`, time.Now().Unix(), src.SID, "verify", st.New, st.Changed, st.Removed, st.Errors, st.Secs)
+			idx.LogScan(db, src.SID, "verify", st.New, st.Changed, st.Removed, st.Errors, st.Secs)
 			db.Close()
 		}
 		nNew, nCh, nRm, nErr, nDisks, secs = nNew+st.New, nCh+st.Changed, nRm+st.Removed, nErr+st.Errors, nDisks+1, secs+st.Secs

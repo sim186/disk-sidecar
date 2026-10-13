@@ -158,12 +158,8 @@ func run(o Options) (Stats, error) {
 	if err := idx.InitMeta(db); err != nil {
 		return st, err
 	}
-	if _, err := db.Exec(`INSERT INTO sources(label, root, host) VALUES (?,?,?)
-		ON CONFLICT(label) DO UPDATE SET root=excluded.root, host=excluded.host`, o.Label, root, o.Host); err != nil {
-		return st, err
-	}
-	var sid int64
-	if err := db.QueryRow(`SELECT id FROM sources WHERE label=?`, o.Label).Scan(&sid); err != nil {
+	sid, err := idx.EnsureSource(db, o.Label, root, o.Host)
+	if err != nil {
 		return st, err
 	}
 
@@ -188,10 +184,7 @@ func run(o Options) (Stats, error) {
 	if err != nil {
 		return st, err
 	}
-	upsert, err := tx.Prepare(`INSERT INTO files(source_id,path,name,ext,size,mtime,kind,top,sha256,seen)
-		VALUES (?,?,?,?,?,?,?,?,?,1)
-		ON CONFLICT(source_id,path) DO UPDATE SET size=excluded.size, mtime=excluded.mtime, kind=excluded.kind,
-		top=excluded.top, sha256=excluded.sha256, seen=1 RETURNING id`)
+	files, err := idx.NewFileWriter(tx, sid)
 	if err != nil {
 		return st, err
 	}
@@ -204,26 +197,20 @@ func run(o Options) (Stats, error) {
 
 	// process records one file; local is where it can be read on this computer ("" = it cannot).
 	process := func(rel string, size, mtime int64, local string) error {
-		name := rel
-		if i := strings.LastIndex(rel, "/"); i >= 0 {
-			name = rel[i+1:]
-		}
 		seen[rel] = struct{}{}
 		count++
 		if o.Progress != nil && count%500 == 0 {
 			o.Progress(count)
 		}
 		if count%5000 == 0 {
+			files.Close()
 			if err := tx.Commit(); err != nil {
 				return err
 			}
 			if tx, err = db.Begin(); err != nil {
 				return err
 			}
-			if upsert, err = tx.Prepare(`INSERT INTO files(source_id,path,name,ext,size,mtime,kind,top,sha256,seen)
-				VALUES (?,?,?,?,?,?,?,?,?,1)
-				ON CONFLICT(source_id,path) DO UPDATE SET size=excluded.size, mtime=excluded.mtime, kind=excluded.kind,
-				top=excluded.top, sha256=excluded.sha256, seen=1 RETURNING id`); err != nil {
+			if files, err = idx.NewFileWriter(tx, sid); err != nil {
 				return err
 			}
 			logf("  %d files (%.0fs)", count, time.Since(t0).Seconds())
@@ -232,10 +219,7 @@ func run(o Options) (Stats, error) {
 			st.Same++
 			return nil
 		}
-		ext := ""
-		if i := strings.LastIndex(name, "."); i > 0 { // like Python's splitext: ".bashrc" has no extension
-			ext = strings.ToLower(name[i+1:])
-		}
+		_, ext, _ := idx.NameParts(rel)
 		var sum sql.NullString
 		if local != "" && o.HashMin >= 0 && size >= o.HashMin {
 			if h, err := SHA256(local); err == nil {
@@ -245,12 +229,8 @@ func run(o Options) (Stats, error) {
 				logf("hash error %s: %v", rel, err)
 			}
 		}
-		top := ""
-		if i := strings.Index(rel, "/"); i >= 0 {
-			top = rel[:i]
-		}
-		var id int64
-		if err := upsert.QueryRow(sid, rel, name, ext, size, mtime, idx.KindOf(ext), top, sum).Scan(&id); err != nil {
+		id, err := files.Put(rel, size, mtime, sum)
+		if err != nil {
 			return err
 		}
 		if _, existed := known[rel]; existed {
@@ -260,10 +240,7 @@ func run(o Options) (Stats, error) {
 		}
 		if local != "" && o.Text && textAllowed(rel) {
 			if body := ReadText(local, ext); body != "" {
-				if _, err := tx.Exec(`DELETE FROM file_text WHERE rowid=?`, id); err != nil {
-					return err
-				}
-				if _, err := tx.Exec(`INSERT INTO file_text(rowid, path, body) VALUES (?,?,?)`, id, rel, body); err != nil {
+				if err := files.PutText(id, rel, body); err != nil {
 					return err
 				}
 			}
@@ -328,6 +305,7 @@ func run(o Options) (Stats, error) {
 			return process(filepath.ToSlash(rel), info.Size(), info.ModTime().Unix(), local)
 		})
 	}
+	files.Close()
 	if walkErr != nil {
 		tx.Rollback()
 		return st, walkErr
@@ -336,27 +314,21 @@ func run(o Options) (Stats, error) {
 		if _, ok := seen[p]; ok {
 			continue
 		}
-		if _, err := tx.Exec(`DELETE FROM file_text WHERE rowid IN (SELECT id FROM files WHERE source_id=? AND path=?)`, sid, p); err != nil {
-			tx.Rollback()
-			return st, err
-		}
-		if _, err := tx.Exec(`DELETE FROM files WHERE source_id=? AND path=?`, sid, p); err != nil {
+		if err := idx.RemovePath(tx, sid, p); err != nil {
 			tx.Rollback()
 			return st, err
 		}
 		st.Removed++
 	}
 	if o.Text { // text kept from a time when these folders were still indexed
-		esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 		for d := range noTextDirs {
-			if _, err := tx.Exec(`DELETE FROM file_text WHERE rowid IN (SELECT id FROM files WHERE source_id=? AND (path LIKE ? ESCAPE '\' OR path LIKE ? ESCAPE '\'))`,
-				sid, esc.Replace(d)+"/%", "%/"+esc.Replace(d)+"/%"); err != nil {
+			if err := idx.DropTextUnder(tx, sid, d); err != nil {
 				tx.Rollback()
 				return st, err
 			}
 		}
 	}
-	if _, err := tx.Exec(`UPDATE sources SET scanned_at=? WHERE id=?`, time.Now().Unix(), sid); err != nil {
+	if err := idx.MarkScanned(tx, sid); err != nil {
 		tx.Rollback()
 		return st, err
 	}

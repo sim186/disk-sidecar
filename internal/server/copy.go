@@ -183,37 +183,30 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		fw, err := idx.NewFileWriter(tx, dst.SID)
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
 		for _, c := range list {
-			name := path.Base(c.rel)
-			ext := ""
-			if i := strings.LastIndex(name, "."); i > 0 {
-				ext = strings.ToLower(name[i+1:])
-			}
-			top := ""
-			if i := strings.Index(c.rel, "/"); i >= 0 {
-				top = c.rel[:i]
-			}
-			var id int64
-			err := tx.QueryRow(`INSERT INTO files(source_id,path,name,ext,size,mtime,kind,top,sha256,seen) VALUES (?,?,?,?,?,?,?,?,?,1)
-				ON CONFLICT(source_id,path) DO UPDATE SET size=excluded.size, mtime=excluded.mtime, kind=excluded.kind,
-				top=excluded.top, sha256=excluded.sha256, seen=1 RETURNING id`,
-				dst.SID, c.rel, name, ext, c.row.size, c.row.mtime, idx.KindOf(ext), top, c.sha).Scan(&id)
+			id, err := fw.Put(c.rel, c.row.size, c.row.mtime, sql.NullString{String: c.sha, Valid: true})
 			if err == nil && c.body.Valid {
-				tx.Exec(`DELETE FROM file_text WHERE rowid=?`, id)
-				_, err = tx.Exec(`INSERT INTO file_text(rowid, path, body) VALUES (?,?,?)`, id, c.rel, c.body.String)
+				err = fw.PutText(id, c.rel, c.body.String)
 			}
 			if err != nil {
+				fw.Close()
 				tx.Rollback()
 				return nil, fmt.Errorf("the files were copied but the index was not updated (%v); use Check now", err)
 			}
 		}
+		fw.Close()
 		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
 		var ibytes int64
 		for _, c := range list { // the source learns its hash too: the copy is now a proven duplicate
 			if !c.row.sha.Valid {
-				m.db.Exec(`UPDATE files SET sha256=? WHERE id=? AND sha256 IS NULL`, c.sha, c.row.id)
+				idx.SetHash(m.db, c.row.id, c.sha)
 			}
 			ibytes += c.row.size
 		}

@@ -234,8 +234,8 @@ func Scan(d Device, log io.Writer, progress func(int)) (scan.Stats, error) {
 	}
 	if err == nil { // the catalog remembers which device it describes (copy and release need the real serial)
 		if mdb, merr := idx.Open(db); merr == nil {
-			mdb.Exec(`INSERT OR REPLACE INTO meta VALUES ('phone_serial', ?)`, d.Serial)
-			mdb.Exec(`INSERT OR REPLACE INTO meta VALUES ('phone_platform', ?)`, d.Platform)
+			idx.SetMeta(mdb, "phone_serial", d.Serial)
+			idx.SetMeta(mdb, "phone_platform", d.Platform)
 			mdb.Close()
 		}
 	}

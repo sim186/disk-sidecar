@@ -126,7 +126,7 @@ func Run(o Options) (Result, error) {
 			logf("error %s: %v", r.path, err)
 			continue
 		}
-		if _, err := tx.Exec(`UPDATE files SET sha256=? WHERE id=?`, sum, r.id); err != nil {
+		if err := idx.SetHash(tx, r.id, sum); err != nil {
 			tx.Rollback()
 			return res, err
 		}

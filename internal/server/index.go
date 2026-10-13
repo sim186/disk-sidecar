@@ -1,7 +1,6 @@
 package server
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -64,45 +63,9 @@ func (s *Server) indexFile() (string, error) {
 }
 
 func buildCombined(srcs []*Src, dest string) error {
-	db, err := sql.Open("sqlite", idx.FileURI(dest, "_pragma=busy_timeout(30000)"))
-	if err != nil {
-		return err
+	page := make([]idx.PageSource, len(srcs))
+	for i, x := range srcs {
+		page[i] = idx.PageSource{DB: x.DB, SID: x.SID, Label: x.Label, Root: x.Root, Kind: x.Kind, ScannedAt: x.ScannedAt}
 	}
-	defer db.Close()
-	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(idx.CombinedDDL); err != nil {
-		return err
-	}
-	alias := map[string]string{}
-	for _, x := range srcs { // ATTACH cannot happen inside a transaction
-		if _, ok := alias[x.DB]; !ok {
-			a := fmt.Sprintf("d%d", len(alias))
-			if _, err := db.Exec(`ATTACH DATABASE ? AS `+a, idx.FileURI(x.DB, "mode=ro")); err != nil {
-				return err
-			}
-			alias[x.DB] = a
-		}
-	}
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	for _, x := range srcs {
-		a := alias[x.DB]
-		res, err := tx.Exec(`INSERT INTO sources(label, root, host, scanned_at, kind, disk_id) VALUES (?,?,?,?,?,?)`,
-			x.Label, x.Root, "", x.ScannedAt, x.Kind, diskIDOf(x.DB))
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
-		nid, _ := res.LastInsertId()
-		if _, err := tx.Exec(`INSERT INTO files(source_id, path, name, ext, size, mtime, kind, top, sha256, seen)
-			SELECT ?, path, name, ext, size, mtime, kind, top, sha256, 1 FROM `+a+`.files WHERE source_id=?`, nid, x.SID); err != nil {
-			tx.Rollback()
-			return err
-		}
-		// the text stays in the disks' own indexes: the page asks the server to search it
-		tx.Exec(`INSERT OR IGNORE INTO marks SELECT ?, path, mark, note FROM `+a+`.marks WHERE source_id=?`, nid, x.SID)
-	}
-	return tx.Commit()
+	return idx.BuildCombined(page, dest)
 }
