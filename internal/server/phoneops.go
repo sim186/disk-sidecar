@@ -10,16 +10,11 @@ import (
 	"time"
 
 	"github.com/sim186/disk-sidecar/internal/catalog"
+	"github.com/sim186/disk-sidecar/internal/farewell"
 	"github.com/sim186/disk-sidecar/internal/idx"
 	"github.com/sim186/disk-sidecar/internal/phone"
 	"github.com/sim186/disk-sidecar/internal/scan"
 )
-
-// letGoWords is what the user types to release files for good (from the farewell box or a phone), in the spirit of Marie Kondo.
-const letGoWords = "let it go"
-
-// letGo reports whether typed is the confirmation, ignoring case and surrounding spaces.
-func letGo(typed string) bool { return strings.ToLower(strings.TrimSpace(typed)) == letGoWords }
 
 // An Android phone is copied from and, once its files are proven safe on a disk, released. The
 // phone has no farewell box, so the only protection is proof: a file is removed from the phone
@@ -56,7 +51,7 @@ func (s *Server) phoneDevice(label string) (*catalog.Source, phone.Device, error
 
 // phoneRows returns the files held by the items (a file, or a folder and all that is inside).
 // folder[rel] tells which items were folders.
-func phoneRows(db *sql.DB, sid int64, items []qItem) (rows []prow, itemOf map[int64]string, folder map[string]bool, err error) {
+func phoneRows(db *sql.DB, sid int64, items []farewell.Item) (rows []prow, itemOf map[int64]string, folder map[string]bool, err error) {
 	itemOf, folder = map[int64]string{}, map[string]bool{}
 	seen := map[int64]bool{}
 	for _, it := range items {
@@ -93,7 +88,7 @@ func phoneRows(db *sql.DB, sid int64, items []qItem) (rows []prow, itemOf map[in
 	return rows, itemOf, folder, nil
 }
 
-func oneSource(items []qItem) (string, error) {
+func oneSource(items []farewell.Item) (string, error) {
 	if len(items) == 0 {
 		return "", refuse("nothing selected")
 	}
@@ -348,8 +343,8 @@ func backupOf(disks []*catalog.Source, dbs map[string]*sql.DB, size int64, sum s
 
 // doPhoneRelease deletes files from an Android phone. Dry only reports. A file goes only if the
 // phone and a connected disk, both read just now, agree on its SHA-256.
-func (s *Server) doPhoneRelease(items []qItem, confirm string, dry bool, job *Job) (any, error) {
-	if !dry && !letGo(confirm) {
+func (s *Server) doPhoneRelease(items []farewell.Item, confirm string, dry bool, job *Job) (any, error) {
+	if !dry && !farewell.Confirmed(confirm) {
 		return nil, refuse("confirmation missing")
 	}
 	label, err := oneSource(items)

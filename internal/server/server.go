@@ -23,6 +23,7 @@ import (
 
 	"github.com/sim186/disk-sidecar/internal/assets"
 	"github.com/sim186/disk-sidecar/internal/catalog"
+	"github.com/sim186/disk-sidecar/internal/farewell"
 	"github.com/sim186/disk-sidecar/internal/phone"
 	"github.com/sim186/disk-sidecar/internal/refusal"
 )
@@ -292,22 +293,23 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 			return
 		}
 		s.opMu.Lock()
-		res, err := s.doRestore(d.ID)
+		res, err := s.box(nil).Restore(d.ID)
 		s.opMu.Unlock()
 		if err != nil {
 			fail(w, err)
 			return
 		}
+		s.gen.Add(1)
 		writeJSON(w, 200, res)
 	case "/api/quarantine":
 		var d struct {
-			Items []qItem `json:"items"`
+			Items []farewell.Item `json:"items"`
 		}
 		if err := json.Unmarshal(body, &d); err != nil {
 			bad(err)
 			return
 		}
-		startJob(func(j *Job) (any, error) { return s.doQuarantine(d.Items, j) })
+		startJob(func(j *Job) (any, error) { return s.box(j).LetGo(d.Items) })
 	case "/api/copy":
 		var d copyReq
 		if err := json.Unmarshal(body, &d); err != nil {
@@ -320,11 +322,11 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 			Confirm string `json:"confirm"`
 		}
 		json.Unmarshal(body, &d)
-		if !letGo(d.Confirm) {
+		if !farewell.Confirmed(d.Confirm) {
 			fail(w, refuse("confirmation missing"))
 			return
 		}
-		startJob(func(j *Job) (any, error) { return s.doEmpty(d.Confirm, j) })
+		startJob(func(j *Job) (any, error) { return s.box(j).Empty(d.Confirm) })
 	case "/api/verify":
 		startJob(s.doVerify)
 	case "/api/reveal":
@@ -367,9 +369,9 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 		startJob(func(j *Job) (any, error) { return s.doPhoneCopy(d, j) })
 	case "/api/phone/release":
 		var d struct {
-			Items   []qItem `json:"items"`
-			Confirm string  `json:"confirm"`
-			Dry     bool    `json:"dry"`
+			Items   []farewell.Item `json:"items"`
+			Confirm string          `json:"confirm"`
+			Dry     bool            `json:"dry"`
 		}
 		if err := json.Unmarshal(body, &d); err != nil {
 			bad(err)

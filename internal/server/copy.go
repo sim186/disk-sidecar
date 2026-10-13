@@ -13,12 +13,13 @@ import (
 	"time"
 
 	"github.com/sim186/disk-sidecar/internal/catalog"
+	"github.com/sim186/disk-sidecar/internal/farewell"
 	"github.com/sim186/disk-sidecar/internal/idx"
 )
 
 type copyReq struct {
-	Items []qItem `json:"items"`
-	To    qItem   `json:"to"` // the folder to copy into: a disk, and a path on it ("" is the root of the disk)
+	Items []farewell.Item `json:"items"`
+	To    farewell.Item   `json:"to"` // the folder to copy into: a disk, and a path on it ("" is the root of the disk)
 }
 
 const partSuffix = ".sidecar-part"
@@ -31,11 +32,11 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 	if len(req.Items) == 0 {
 		return nil, refuse("nothing to copy")
 	}
-	plans, handles, _, done, err := s.planItems(req.Items, job, "copied")
+	sel, err := s.box(job).Check(req.Items, "copied")
 	if err != nil {
 		return nil, err
 	}
-	defer done()
+	defer sel.Close()
 
 	srcs := s.catalog().Sources()
 	var dst *catalog.Source
@@ -76,15 +77,15 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 
 	// everything is checked before the first byte is written
 	type job1 struct {
-		m      *move
+		m      *farewell.Pick
 		target string // final folder or file
 		base   string
 	}
 	var jobs []job1
 	seen := map[string]bool{}
 	var total int64
-	for _, m := range plans {
-		base := path.Base(m.rel)
+	for _, m := range sel.Picks {
+		base := path.Base(m.Rel)
 		target := filepath.Join(destDir, base)
 		if seen[strings.ToLower(base)] {
 			return nil, refuse("two of the items are both called %q: copy them one at a time", base)
@@ -93,14 +94,14 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 		if _, err := os.Lstat(target); err == nil {
 			return nil, refuse("%s: already exists in the destination; not overwriting", path.Join(destRel, base))
 		}
-		if m.isDir {
-			rm, rt := catalog.Realpath(m.full), filepath.Join(catalog.Realpath(anc), below)
+		if m.IsDir {
+			rm, rt := catalog.Realpath(m.Full), filepath.Join(catalog.Realpath(anc), below)
 			if rt == rm || strings.HasPrefix(rt+string(filepath.Separator), rm+string(filepath.Separator)) {
-				return nil, refuse("%s: cannot copy a folder into itself", m.rel)
+				return nil, refuse("%s: cannot copy a folder into itself", m.Rel)
 			}
 		}
-		for _, r := range m.rows {
-			total += r.size
+		for _, r := range m.Files {
+			total += r.Size
 		}
 		jobs = append(jobs, job1{m, target, base})
 	}
@@ -108,7 +109,7 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 		job.Update("Copying…", 0, total)
 	}
 
-	ddb := handles[dst.DB]
+	ddb := sel.Index(dst.DB)
 	if ddb == nil {
 		if ddb, err = idx.Open(dst.DB); err != nil {
 			return nil, err
@@ -127,7 +128,7 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 	for _, j := range jobs {
 		m := j.m
 		type made struct {
-			row  moveRow
+			row  idx.File
 			rel  string
 			sha  string
 			body sql.NullString
@@ -135,36 +136,34 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 		var list []made
 		fail := func(err error) (any, error) {
 			os.RemoveAll(j.target) // the target did not exist before: all of it is ours
-			return nil, refuse("%s: copy failed (%v). Nothing of it was kept. Copied so far: %d items.", m.rel, err, nitems)
+			return nil, refuse("%s: copy failed (%v). Nothing of it was kept. Copied so far: %d items.", m.Rel, err, nitems)
 		}
-		for _, r := range m.rows {
+		for _, r := range m.Files {
 			sub := "" // where this file goes under the target folder
-			if m.isDir {
-				sub = strings.TrimPrefix(r.path, m.rel+"/")
+			if m.IsDir {
+				sub = strings.TrimPrefix(r.Path, m.Rel+"/")
 			}
-			from := filepath.Join(m.root, filepath.FromSlash(r.path))
+			from := filepath.Join(m.Source.Root, filepath.FromSlash(r.Path))
 			to := j.target
-			if m.isDir {
+			if m.IsDir {
 				to = filepath.Join(j.target, filepath.FromSlash(sub))
 			}
 			if job != nil {
-				job.Phase("Copying " + path.Base(r.path))
+				job.Phase("Copying " + path.Base(r.Path))
 			}
 			sum, err := copyVerified(from, to, r, job)
 			if err != nil {
 				return fail(err)
 			}
-			if r.sha.Valid && r.sha.String != sum {
+			if r.SHA.Valid && r.SHA.String != sum {
 				os.Remove(to)
-				return fail(fmt.Errorf("%s no longer matches the index: it was changed since the last scan", r.path))
+				return fail(fmt.Errorf("%s no longer matches the index: it was changed since the last scan", r.Path))
 			}
 			rel := path.Join(destRel, j.base)
-			if m.isDir {
+			if m.IsDir {
 				rel = path.Join(rel, sub)
 			}
-			var body sql.NullString
-			m.db.QueryRow(`SELECT body FROM file_text WHERE rowid=?`, r.id).Scan(&body)
-			list = append(list, made{r, rel, sum, body})
+			list = append(list, made{r, rel, sum, idx.Text(m.DB, r.ID)})
 		}
 		tx, err := ddb.Begin()
 		if err != nil {
@@ -176,7 +175,7 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 			return nil, err
 		}
 		for _, c := range list {
-			id, err := fw.Put(c.rel, c.row.size, c.row.mtime, sql.NullString{String: c.sha, Valid: true})
+			id, err := fw.Put(c.rel, c.row.Size, c.row.Mtime, sql.NullString{String: c.sha, Valid: true})
 			if err == nil && c.body.Valid {
 				err = fw.PutText(id, c.rel, c.body.String)
 			}
@@ -192,15 +191,15 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 		}
 		var ibytes int64
 		for _, c := range list { // the source learns its hash too: the copy is now a proven duplicate
-			if !c.row.sha.Valid {
-				idx.SetHash(m.db, c.row.id, c.sha)
+			if !c.row.SHA.Valid {
+				idx.SetHash(m.DB, c.row.ID, c.sha)
 			}
-			ibytes += c.row.size
+			ibytes += c.row.Size
 		}
 		nbytes += ibytes
 		nfiles += len(list)
 		nitems++
-		m.disk.Log("copy-from", m.label, m.rel, len(list), 0)
+		m.Source.Disk.Log("copy-from", m.Source.Raw, m.Rel, len(list), 0)
 		dst.Disk.Log("copy-to", dst.Label, path.Join(destRel, j.base), len(list), ibytes)
 	}
 	return map[string]any{"copied": nitems, "files": nfiles, "bytes": nbytes}, nil
@@ -208,7 +207,7 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 
 // copyVerified copies from to to (which must not exist) through a temporary file, checks what
 // was written by reading it back, restores the modification time and returns the SHA-256.
-func copyVerified(from, to string, r moveRow, job *Job) (string, error) {
+func copyVerified(from, to string, r idx.File, job *Job) (string, error) {
 	in, err := os.Open(from)
 	if err != nil {
 		return "", err
@@ -218,8 +217,8 @@ func copyVerified(from, to string, r moveRow, job *Job) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if st.Size() != r.size || st.ModTime().Unix() != r.mtime {
-		return "", fmt.Errorf("%s changed since the last scan", r.path)
+	if st.Size() != r.Size || st.ModTime().Unix() != r.Mtime {
+		return "", fmt.Errorf("%s changed since the last scan", r.Path)
 	}
 	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
 		return "", err
@@ -261,8 +260,8 @@ func copyVerified(from, to string, r moveRow, job *Job) (string, error) {
 			return "", rerr
 		}
 	}
-	if n != r.size {
-		return "", fmt.Errorf("%s changed while it was being copied", r.path)
+	if n != r.Size {
+		return "", fmt.Errorf("%s changed while it was being copied", r.Path)
 	}
 	if err := out.Sync(); err != nil {
 		return "", err
@@ -282,9 +281,9 @@ func copyVerified(from, to string, r moveRow, job *Job) (string, error) {
 		return "", err
 	}
 	if hex.EncodeToString(h2.Sum(nil)) != sum {
-		return "", fmt.Errorf("%s was not written correctly (the copy does not match)", r.path)
+		return "", fmt.Errorf("%s was not written correctly (the copy does not match)", r.Path)
 	}
-	mt := time.Unix(r.mtime, 0)
+	mt := time.Unix(r.Mtime, 0)
 	os.Chtimes(tmp, mt, mt)
 	os.Chmod(tmp, st.Mode().Perm()|0o600)
 	if _, err := os.Lstat(to); err == nil { // os.Rename would silently replace it
