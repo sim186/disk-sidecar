@@ -2,9 +2,7 @@ package server
 
 import (
 	"database/sql"
-	"encoding/csv"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -14,7 +12,9 @@ import (
 	"time"
 
 	"github.com/sim186/disk-sidecar/internal/assets"
+	"github.com/sim186/disk-sidecar/internal/catalog"
 	"github.com/sim186/disk-sidecar/internal/idx"
+	"github.com/sim186/disk-sidecar/internal/refusal"
 	"github.com/sim186/disk-sidecar/internal/scan"
 )
 
@@ -30,56 +30,6 @@ func safeLabel(l string) string {
 	return l
 }
 
-// cleanRel validates a path sent by the page: relative, no "..", never inside .sidecar.
-func cleanRel(rel string) (string, error) {
-	rel = strings.Trim(strings.ReplaceAll(rel, "\\", "/"), "/")
-	parts := strings.Split(rel, "/")
-	bad := rel == ""
-	for _, p := range parts {
-		if p == "" || p == "." || p == ".." || p == ".sidecar" {
-			bad = true
-		}
-	}
-	if !bad && strings.Contains(parts[0], ":") {
-		bad = true
-	}
-	if bad {
-		return "", refuse("invalid path: %q", rel)
-	}
-	return rel, nil
-}
-
-func realpath(p string) string {
-	if r, err := filepath.EvalSymlinks(p); err == nil {
-		return r
-	}
-	a, _ := filepath.Abs(p)
-	return a
-}
-
-// inside reports whether full is strictly inside root, after resolving links.
-func inside(root, full string) bool {
-	r, f := realpath(root), realpath(full)
-	rel, err := filepath.Rel(r, f)
-	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-func (s *Server) logAction(d *Disk, action, source, path string, nfiles int, nbytes int64) {
-	p := filepath.Join(d.Dir(), "log.csv")
-	_, statErr := os.Stat(p)
-	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	w := csv.NewWriter(f)
-	if statErr != nil {
-		w.Write([]string{"time", "action", "source", "path", "files", "bytes"})
-	}
-	w.Write([]string{time.Now().Format("2006-01-02 15:04:05"), action, source, path, fmt.Sprint(nfiles), fmt.Sprint(nbytes)})
-	w.Flush()
-}
-
 // ---------------------------------------------------------------- marks
 
 type markItem struct {
@@ -90,11 +40,7 @@ type markItem struct {
 }
 
 func (s *Server) doMarks(items []markItem) (any, error) {
-	srcs, _ := s.listSources()
-	by := map[string]*Src{}
-	for _, x := range srcs {
-		by[x.Label] = x
-	}
+	cat := s.catalog()
 	type mk struct {
 		sid  int64
 		rel  string
@@ -103,14 +49,14 @@ func (s *Server) doMarks(items []markItem) (any, error) {
 	}
 	groups := map[string][]mk{}
 	for _, it := range items {
-		src := by[it.Source]
-		if src == nil {
-			return nil, refuse("unknown source: %s", it.Source)
+		src, err := cat.Get(it.Source)
+		if err != nil {
+			return nil, err
 		}
 		if src.Kind != "disk" && src.Kind != "phone" {
-			return nil, refuse("%s is %s: marks must be set from its own computer", src.Label, readOnlyWhat(src.Kind))
+			return nil, refuse("%s is %s: marks must be set from its own computer", src.Label, src.ReadOnlyWhat())
 		}
-		rel, err := cleanRel(it.Path)
+		rel, err := catalog.CleanRel(it.Path)
 		if err != nil {
 			return nil, err
 		}
@@ -160,7 +106,7 @@ type move struct {
 	isDir                  bool
 	rows                   []moveRow
 	db                     *sql.DB
-	disk                   *Disk
+	disk                   *catalog.Disk
 }
 
 // plan validates the items of ONE disk index (raw labels) and returns what would be moved.
@@ -194,8 +140,7 @@ func plan(db *sql.DB, items []struct{ Source, Path string }, job *Job, diskRoot 
 		}
 		m, err := planOne(db, srcs[it.Source].sid, srcs[it.Source].root, it.Source, it.Path, guard)
 		if err != nil {
-			var r *Refused
-			if ok := asRefused(err, &r); ok {
+			if r, ok := refusal.As(err); ok {
 				problems = append(problems, r.Msg)
 				continue
 			}
@@ -225,20 +170,12 @@ func plan(db *sql.DB, items []struct{ Source, Path string }, job *Job, diskRoot 
 	return keep, nil
 }
 
-func asRefused(err error, out **Refused) bool {
-	r, ok := err.(*Refused)
-	if ok {
-		*out = r
-	}
-	return ok
-}
-
 func planOne(db *sql.DB, sid int64, root, label, rel string, guard func(string) error) (*move, error) {
-	if !dirExists(root) {
+	if !catalog.DirExists(root) {
 		return nil, refuse("%s: the disk is not reachable from this computer (%s)", label, root)
 	}
 	full := filepath.Join(root, filepath.FromSlash(rel))
-	if !inside(root, full) {
+	if !catalog.Inside(root, full) {
 		return nil, refuse("%s: outside the source", rel)
 	}
 	if err := guard(full); err != nil {
@@ -356,7 +293,7 @@ func checkLastCopy(liveDBs []string, all []*move) error {
 			for j, c := range chunk {
 				args[j] = c
 			}
-			rs, err := db.Query(`SELECT sha256, COUNT(*) FROM files WHERE sha256 IN (`+placeholders(len(chunk))+`) GROUP BY sha256`, args...)
+			rs, err := db.Query(`SELECT sha256, COUNT(*) FROM files WHERE sha256 IN (`+idx.Placeholders(len(chunk))+`) GROUP BY sha256`, args...)
 			if err != nil {
 				continue
 			}
@@ -405,14 +342,15 @@ type qItem struct {
 
 // planItems validates items that live on any number of disks and returns what they hold. The
 // caller must call done to close the index handles; handles are by index path.
-func (s *Server) planItems(items []qItem, job *Job, verb string) (plans []*move, handles map[string]*sql.DB, disks []*Disk, done func(), err error) {
-	srcs, disks := s.listSources()
-	by := map[string]*Src{}
+func (s *Server) planItems(items []qItem, job *Job, verb string) (plans []*move, handles map[string]*sql.DB, disks []*catalog.Disk, done func(), err error) {
+	cat := s.catalog()
+	srcs, disks := cat.Sources(), cat.Disks()
+	by := map[string]*catalog.Source{}
 	for _, x := range srcs {
 		by[x.Label] = x
 	}
 	type group struct {
-		disk  *Disk
+		disk  *catalog.Disk
 		items []struct{ Source, Path string }
 	}
 	groups := map[string]*group{}
@@ -423,9 +361,9 @@ func (s *Server) planItems(items []qItem, job *Job, verb string) (plans []*move,
 			return nil, nil, nil, nil, refuse("unknown source: %s", it.Source)
 		}
 		if src.Kind != "disk" {
-			return nil, nil, nil, nil, refuse("%s is %s: its files cannot be %s", src.Label, readOnlyWhat(src.Kind), verb)
+			return nil, nil, nil, nil, refuse("%s is %s: its files cannot be %s", src.Label, src.ReadOnlyWhat(), verb)
 		}
-		rel, err := cleanRel(it.Path)
+		rel, err := catalog.CleanRel(it.Path)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
@@ -494,7 +432,7 @@ func (s *Server) doQuarantine(items []qItem, job *Job) (any, error) {
 	var nbytes int64
 	for _, m := range plans {
 		if !backed[m.disk.DB] {
-			copyFile(m.disk.DB, m.disk.DB+".bak")
+			catalog.CopyFile(m.disk.DB, m.disk.DB+".bak")
 			backed[m.disk.DB] = true
 		}
 		qrel := qdir + "/" + batch + "/" + safeLabel(m.label) + "/" + m.rel
@@ -528,29 +466,12 @@ func (s *Server) doQuarantine(items []qItem, job *Job) (any, error) {
 		if job != nil {
 			job.Advance(int64(len(m.rows)))
 		}
-		s.logAction(m.disk, "quarantine", m.label, m.rel, len(m.rows), size)
+		m.disk.Log("quarantine", m.label, m.rel, len(m.rows), size)
 		done++
 		nfiles += len(m.rows)
 		nbytes += size
 	}
 	return map[string]any{"moved": done, "files": nfiles, "bytes": nbytes, "batch": batch}, nil
-}
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
-	}
-	return out.Close()
 }
 
 type qMove struct {
@@ -564,7 +485,7 @@ type qMove struct {
 	MovedAt int64  `json:"moved_at"`
 }
 
-func (s *Server) quarantineState(srcs []*Src, disks []*Disk) []qMove {
+func (s *Server) quarantineState(srcs []*catalog.Source, disks []*catalog.Disk) []qMove {
 	moves := []qMove{}
 	for _, d := range disks {
 		db, err := idx.OpenRO(d.DB)
@@ -601,8 +522,9 @@ func (s *Server) quarantineState(srcs []*Src, disks []*Disk) []qMove {
 
 func (s *Server) doRestore(moveID string) (any, error) {
 	key, num, _ := strings.Cut(moveID, ":")
-	srcs, disks := s.listSources()
-	var disk *Disk
+	cat := s.catalog()
+	srcs, disks := cat.Sources(), cat.Disks()
+	var disk *catalog.Disk
 	for _, d := range disks {
 		if d.Key == key {
 			disk = d
@@ -622,7 +544,7 @@ func (s *Server) doRestore(moveID string) (any, error) {
 		Scan(&id, &sid, &rel, &qrel, &size); err != nil {
 		return nil, refuse("item not found in quarantine")
 	}
-	var src *Src
+	var src *catalog.Source
 	for _, x := range srcs {
 		if x.DB == disk.DB && x.SID == sid {
 			src = x
@@ -632,7 +554,7 @@ func (s *Server) doRestore(moveID string) (any, error) {
 		return nil, refuse("source not found")
 	}
 	full, qfull := filepath.Join(src.Root, filepath.FromSlash(rel)), filepath.Join(src.Root, filepath.FromSlash(qrel))
-	if !dirExists(src.Root) {
+	if !catalog.DirExists(src.Root) {
 		return nil, refuse("the disk is not reachable")
 	}
 	if err := s.guardPath(full); err != nil {
@@ -661,7 +583,7 @@ func (s *Server) doRestore(moveID string) (any, error) {
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	s.logAction(disk, "restore", src.Label, rel, 0, size)
+	disk.Log("restore", src.Label, rel, 0, size)
 	s.gen.Add(1)
 	return map[string]any{"restored": rel, "note": "Use Check now to restore the searchable text too."}, nil
 }
@@ -703,9 +625,10 @@ func (s *Server) doEmpty(confirm string, job *Job) (any, error) {
 	if !letGo(confirm) {
 		return nil, refuse("confirmation missing")
 	}
-	srcs, disks := s.listSources()
+	cat := s.catalog()
+	srcs, disks := cat.Sources(), cat.Disks()
 	type dbh struct {
-		d  *Disk
+		d  *catalog.Disk
 		db *sql.DB
 	}
 	var hs []dbh
@@ -731,7 +654,7 @@ func (s *Server) doEmpty(confirm string, job *Job) (any, error) {
 	var freed int64
 	count := 0
 	for _, h := range hs {
-		roots := map[int64]*Src{}
+		roots := map[int64]*catalog.Source{}
 		for _, x := range srcs {
 			if x.DB == h.d.DB {
 				roots[x.SID] = x
@@ -756,12 +679,12 @@ func (s *Server) doEmpty(confirm string, job *Job) (any, error) {
 		used := map[string]bool{}
 		for _, m := range list {
 			src := roots[m.sid]
-			if src == nil || !dirExists(src.Root) {
+			if src == nil || !catalog.DirExists(src.Root) {
 				continue
 			}
 			rmTree(filepath.Join(src.Root, filepath.FromSlash(m.qpath)), job)
 			idx.RecordDeleted(h.db, m.id)
-			s.logAction(h.d, "delete", src.Label, m.qpath, 0, m.size)
+			h.d.Log("delete", src.Label, m.qpath, 0, m.size)
 			freed += m.size
 			count++
 			used[src.Root] = true
@@ -788,7 +711,7 @@ func (s *Server) doEmpty(confirm string, job *Job) (any, error) {
 func (s *Server) doVerify(job *Job) (any, error) { return s.verify(job, true) }
 
 func (s *Server) verify(job *Job, withHome bool) (any, error) {
-	srcs, _ := s.listSources()
+	srcs := s.catalog().Sources()
 	host, _ := os.Hostname()
 	totals := map[string]any{"new": 0, "changed": 0, "removed": 0, "errors": 0, "disks": 0, "secs": 0.0,
 		"at": time.Now().Unix(), "details": []map[string]any{}}
@@ -796,7 +719,7 @@ func (s *Server) verify(job *Job, withHome bool) (any, error) {
 	var secs float64
 	details := []map[string]any{}
 	for _, src := range srcs {
-		if src.Kind != "disk" || !dirExists(src.Root) {
+		if !src.Reachable() {
 			continue
 		}
 		home := scan.IsHome(src.Root)
@@ -838,11 +761,12 @@ func (s *Server) verify(job *Job, withHome bool) (any, error) {
 // ---------------------------------------------------------------- state for the page
 
 func (s *Server) state() map[string]any {
-	srcs, disks := s.listSources()
+	cat := s.catalog()
+	srcs, disks := cat.Sources(), cat.Disks()
 	var warnings []string
 	ids := map[string]string{}
 	for _, d := range disks {
-		id := diskIDOf(d.DB)
+		id := idx.DiskID(d.DB)
 		if prev, ok := ids[id]; ok && id != "" {
 			warnings = append(warnings, fmt.Sprintf("Two disks have the same ID (%s and %s): one is a clone of the other.", prev, d.Root))
 		}
@@ -856,7 +780,7 @@ func (s *Server) state() map[string]any {
 	}
 	out := []sv{}
 	for _, x := range srcs {
-		out = append(out, sv{x.Label, x.Kind, x.Kind == "disk" && dirExists(x.Root), x.ScannedAt})
+		out = append(out, sv{x.Label, x.Kind, x.Reachable(), x.ScannedAt})
 	}
 	var startup any
 	if s.startupJob != "" {
@@ -900,21 +824,13 @@ func (s *Server) searchText(q map[string][]string) []hit {
 	if len(terms) == 0 {
 		return out
 	}
-	srcs, _ := s.listSources()
-	byDB := map[string][]*Src{}
-	var order []string
-	for _, x := range srcs {
-		if _, ok := byDB[x.DB]; !ok {
-			order = append(order, x.DB)
-		}
-		byDB[x.DB] = append(byDB[x.DB], x)
-	}
-	for _, dbPath := range order {
+	cat := s.catalog()
+	for _, dbPath := range cat.Indexes() {
 		db, err := idx.OpenRO(dbPath)
 		if err != nil {
 			continue
 		}
-		for _, x := range byDB[dbPath] {
+		for _, x := range cat.In(dbPath) {
 			if want := get("source"); want != "" && want != x.Label {
 				continue
 			}

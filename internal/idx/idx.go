@@ -209,7 +209,7 @@ func DiskRootOf(dbPath string) string {
 // path used at scan time (/Volumes/MyDisk); on another computer the same disk has another path
 // (E:\). If the stored root is missing, check that a few indexed files exist with the same size
 // under the disk that holds this index, and if so use that.
-func ResolveRoot(db *sql.DB, sid int64, root, diskRoot string) string {
+func ResolveRoot(db Querier, sid int64, root, diskRoot string) string {
 	if st, err := os.Stat(root); err == nil && st.IsDir() {
 		return root
 	}

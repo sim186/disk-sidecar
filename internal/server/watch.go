@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sim186/disk-sidecar/internal/catalog"
 	"github.com/sim186/disk-sidecar/internal/install"
 )
 
@@ -95,33 +96,33 @@ func diskName(p string) string {
 // volumes lists the disks plugged in, without the system disk and hidden folders.
 func (s *Server) volumes() []Volume {
 	have := map[string]bool{}
-	for _, d := range s.discover() {
-		have[realpath(d.Root)] = true
+	for _, d := range catalog.Discover(s.cfg.places()) {
+		have[catalog.Realpath(d.Root)] = true
 	}
 	out := []Volume{}
 	seen := map[string]bool{}
-	for _, p := range s.mountCandidates() {
-		if seen[p] || strings.HasPrefix(filepath.Base(p), ".") || !dirExists(p) || systemMount(p) {
+	for _, p := range catalog.MountCandidates(s.cfg.places()) {
+		if seen[p] || strings.HasPrefix(filepath.Base(p), ".") || !catalog.DirExists(p) || systemMount(p) {
 			continue
 		}
 		seen[p] = true
-		out = append(out, Volume{Path: p, Name: diskName(p), HasSidecar: have[realpath(p)]})
+		out = append(out, Volume{Path: p, Name: diskName(p), HasSidecar: have[catalog.Realpath(p)]})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
-	if h, err := os.UserHomeDir(); err == nil && h != "" && !s.cfg.NoDefaultMounts && dirExists(h) { // the system disk: your user folder only
-		out = append(out, Volume{Path: h, Name: "This computer", HasSidecar: have[realpath(h)]})
+	if h, err := os.UserHomeDir(); err == nil && h != "" && !s.cfg.NoDefaultMounts && catalog.DirExists(h) { // the system disk: your user folder only
+		out = append(out, Volume{Path: h, Name: "This computer", HasSidecar: have[catalog.Realpath(h)]})
 	}
 	return out
 }
 
 func (s *Server) watchOnce(w *watcher, first bool) {
 	have := map[string]bool{}
-	for _, d := range s.discover() {
-		have[realpath(d.Root)] = true
+	for _, d := range catalog.Discover(s.cfg.places()) {
+		have[catalog.Realpath(d.Root)] = true
 	}
 	now := map[string]bool{}
-	for _, p := range s.mountCandidates() {
-		if strings.HasPrefix(filepath.Base(p), ".") || !dirExists(p) || systemMount(p) {
+	for _, p := range catalog.MountCandidates(s.cfg.places()) {
+		if strings.HasPrefix(filepath.Base(p), ".") || !catalog.DirExists(p) || systemMount(p) {
 			continue
 		}
 		now[p] = true
@@ -131,7 +132,7 @@ func (s *Server) watchOnce(w *watcher, first bool) {
 	for p := range now {
 		isNew := !w.known[p]
 		w.known[p] = true
-		if first || !isNew || have[realpath(p)] || w.ignored[p] {
+		if first || !isNew || have[catalog.Realpath(p)] || w.ignored[p] {
 			continue
 		}
 		w.pending[p] = NewDisk{Path: p, Name: diskName(p)}
@@ -143,7 +144,7 @@ func (s *Server) watchOnce(w *watcher, first bool) {
 		}
 	}
 	for p := range w.pending { // got a sidecar in the meantime (made by hand, or by another copy)
-		if have[realpath(p)] {
+		if have[catalog.Realpath(p)] {
 			delete(w.pending, p)
 		}
 	}

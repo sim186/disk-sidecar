@@ -22,7 +22,9 @@ import (
 	"time"
 
 	"github.com/sim186/disk-sidecar/internal/assets"
+	"github.com/sim186/disk-sidecar/internal/catalog"
 	"github.com/sim186/disk-sidecar/internal/phone"
+	"github.com/sim186/disk-sidecar/internal/refusal"
 )
 
 // Config of the server.
@@ -52,6 +54,10 @@ type Server struct {
 	tmp        string
 	watch      *watcher
 	upd        *updater
+	catMu      sync.Mutex
+	cat        *catalog.Catalog
+	catGen     int64
+	catAt      time.Time
 }
 
 // Run starts the server and blocks until interrupted.
@@ -62,16 +68,11 @@ func Run(cfg Config, out io.Writer) error {
 		return fmt.Errorf("cannot listen on port %d: %w (is Sidecar already running?)", cfg.Port, err)
 	}
 	url := fmt.Sprintf("http://127.0.0.1:%d/catalog.html", cfg.Port)
-	srcs, disks := s.listSources()
+	cat := s.catalog()
+	disks := cat.Disks()
 	fmt.Fprintf(out, "Sidecar %s: %s\n", assets.Version, url)
 	for _, d := range disks {
-		n := 0
-		for _, x := range srcs {
-			if x.DB == d.DB {
-				n++
-			}
-		}
-		fmt.Fprintf(out, "  disk: %s  (%d sources)\n", d.Root, n)
+		fmt.Fprintf(out, "  disk: %s  (%d sources)\n", d.Root, len(cat.In(d.DB)))
 	}
 	if len(disks) == 0 {
 		fmt.Fprintln(out, "  no index found: create one with  sidecar scan <disk> --db <disk>/.sidecar/index.db --source <name>")
@@ -147,7 +148,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 func fail(w http.ResponseWriter, err error) {
-	if r, ok := err.(*Refused); ok {
+	if r, ok := refusal.As(err); ok {
 		writeJSON(w, 409, map[string]string{"error": r.Msg})
 		return
 	}
@@ -420,4 +421,23 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 	default:
 		writeJSON(w, 404, map[string]string{"error": "unknown action"})
 	}
+}
+
+func (c Config) places() catalog.Options {
+	return catalog.Options{HomeDB: c.HomeDB, Mounts: c.Mounts, NoDefaultMounts: c.NoDefaultMounts}
+}
+
+// catalog is what is visible now.
+func (s *Server) catalog() *catalog.Catalog { return catalog.Load(s.cfg.places()) }
+
+// recentCatalog is a catalog at most a moment old, unless something changed since. Previews ask
+// dozens of times a second while the page scrolls, and each catalog opens every index.
+func (s *Server) recentCatalog() *catalog.Catalog {
+	s.catMu.Lock()
+	defer s.catMu.Unlock()
+	g := s.gen.Load()
+	if s.cat == nil || s.catGen != g || time.Since(s.catAt) > 2*time.Second {
+		s.cat, s.catGen, s.catAt = s.catalog(), g, time.Now()
+	}
+	return s.cat
 }

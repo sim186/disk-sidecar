@@ -5,29 +5,22 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+
+	"github.com/sim186/disk-sidecar/internal/catalog"
 )
 
 // diskFile resolves a source label and a path relative to its root to a file that is on a disk
 // plugged in now. Nothing outside the disk is ever returned.
 func (s *Server) diskFile(source, rel string) (string, os.FileInfo, error) {
-	rel, err := cleanRel(rel)
+	rel, err := catalog.CleanRel(rel)
 	if err != nil {
 		return "", nil, err
 	}
-	var src *Src
-	srcs, _ := s.listSources()
-	for _, x := range srcs {
-		if x.Label == source {
-			src = x
-		}
+	src, err := s.recentCatalog().Writable(source, "its files are not here to show")
+	if err != nil {
+		return "", nil, err
 	}
-	if src == nil {
-		return "", nil, refuse("unknown source: %s", source)
-	}
-	if src.Kind != "disk" {
-		return "", nil, refuse("%s is not a disk on this computer: its files are not here to show", src.Label)
-	}
-	if !dirExists(src.Root) {
+	if !src.Reachable() {
 		return "", nil, refuse("%s is not plugged in", src.Label)
 	}
 	full := filepath.Join(src.Root, filepath.FromSlash(rel))
@@ -35,7 +28,7 @@ func (s *Server) diskFile(source, rel string) (string, os.FileInfo, error) {
 	if err != nil {
 		return "", nil, refuse("the file is no longer on the disk: %s", rel)
 	}
-	if !inside(src.Root, full) {
+	if !catalog.Inside(src.Root, full) {
 		return "", nil, refuse("invalid path: %q", rel)
 	}
 	return full, st, nil

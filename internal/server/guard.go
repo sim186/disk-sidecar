@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/sim186/disk-sidecar/internal/catalog"
 )
 
 // The system disk is not a disk like the others: it holds the operating system and the programs.
@@ -22,7 +24,7 @@ type guardEnv struct {
 func currentGuard() guardEnv {
 	g := guardEnv{windows: runtime.GOOS == "windows", external: []string{"/Volumes", "/media", "/mnt", "/run/media"}}
 	if h, err := os.UserHomeDir(); err == nil {
-		g.home = realpath(h)
+		g.home = catalog.Realpath(h)
 	}
 	if g.windows {
 		g.sysDrive = os.Getenv("SystemDrive")
@@ -35,8 +37,8 @@ func currentGuard() guardEnv {
 
 // guardPath is the check used by the server for a real path on this computer.
 func (s *Server) guardPath(p string) error {
-	anc, below := existingAncestor(p) // the path may not exist (yet): resolve the part that does
-	return currentGuard().check(filepath.Join(realpath(anc), below))
+	anc, below := catalog.ExistingAncestor(p) // the path may not exist (yet): resolve the part that does
+	return currentGuard().check(filepath.Join(catalog.Realpath(anc), below))
 }
 
 var errNotUser = errors.New("this is on the system disk, outside your user folders. Sidecar only changes your own files there (Documents, Pictures, …), never the system or programs")

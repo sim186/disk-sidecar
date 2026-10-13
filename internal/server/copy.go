@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sim186/disk-sidecar/internal/catalog"
 	"github.com/sim186/disk-sidecar/internal/idx"
 )
 
@@ -21,20 +22,6 @@ type copyReq struct {
 }
 
 const partSuffix = ".sidecar-part"
-
-// existingAncestor returns the deepest part of full that exists, and the part below it.
-func existingAncestor(full string) (string, string) {
-	rest := ""
-	for p := full; ; p = filepath.Dir(p) {
-		if _, err := os.Lstat(p); err == nil {
-			return p, rest
-		}
-		if filepath.Dir(p) == p {
-			return p, rest
-		}
-		rest = filepath.Join(filepath.Base(p), rest)
-	}
-}
 
 // doCopy copies files and folders from any disk to a folder on any disk (the same one too). The
 // originals are never touched. Every file is written under a temporary name, read back and
@@ -50,8 +37,8 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 	}
 	defer done()
 
-	srcs, _ := s.listSources()
-	var dst *Src
+	srcs := s.catalog().Sources()
+	var dst *catalog.Source
 	for _, x := range srcs {
 		if x.Label == req.To.Source {
 			dst = x
@@ -61,26 +48,26 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 		return nil, refuse("unknown disk: %s", req.To.Source)
 	}
 	if dst.Kind != "disk" {
-		return nil, refuse("%s is %s: nothing can be copied into it", dst.Label, readOnlyWhat(dst.Kind))
+		return nil, refuse("%s is %s: nothing can be copied into it", dst.Label, dst.ReadOnlyWhat())
 	}
-	if !dirExists(dst.Root) {
+	if !catalog.DirExists(dst.Root) {
 		return nil, refuse("%s: the disk is not reachable from this computer (%s)", dst.Label, dst.Root)
 	}
 	destRel := strings.Trim(strings.ReplaceAll(req.To.Path, "\\", "/"), "/")
 	if destRel != "" {
-		if destRel, err = cleanRel(destRel); err != nil {
+		if destRel, err = catalog.CleanRel(destRel); err != nil {
 			return nil, err
 		}
 	}
 	destDir := filepath.Join(dst.Root, filepath.FromSlash(destRel))
-	anc, below := existingAncestor(destDir)
+	anc, below := catalog.ExistingAncestor(destDir)
 	if st, err := os.Stat(anc); err != nil || !st.IsDir() {
 		return nil, refuse("%s: not a folder", destRel)
 	}
-	if realpath(anc) != realpath(dst.Root) && !inside(dst.Root, anc) {
+	if catalog.Realpath(anc) != catalog.Realpath(dst.Root) && !catalog.Inside(dst.Root, anc) {
 		return nil, refuse("%s: outside the disk", destRel)
 	}
-	if err := s.guardPath(filepath.Join(realpath(anc), below)); err != nil {
+	if err := s.guardPath(filepath.Join(catalog.Realpath(anc), below)); err != nil {
 		return nil, refuse("%s: %v", destRel, err)
 	}
 	if lst, err := os.Lstat(destDir); err == nil && lst.Mode()&os.ModeSymlink != 0 {
@@ -107,7 +94,7 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 			return nil, refuse("%s: already exists in the destination; not overwriting", path.Join(destRel, base))
 		}
 		if m.isDir {
-			rm, rt := realpath(m.full), filepath.Join(realpath(anc), below)
+			rm, rt := catalog.Realpath(m.full), filepath.Join(catalog.Realpath(anc), below)
 			if rt == rm || strings.HasPrefix(rt+string(filepath.Separator), rm+string(filepath.Separator)) {
 				return nil, refuse("%s: cannot copy a folder into itself", m.rel)
 			}
@@ -128,7 +115,7 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 		}
 		defer ddb.Close()
 	}
-	copyFile(dst.DB, dst.DB+".bak")
+	catalog.CopyFile(dst.DB, dst.DB+".bak")
 	if below != "" {
 		if err := os.MkdirAll(destDir, 0o755); err != nil {
 			return nil, err
@@ -213,8 +200,8 @@ func (s *Server) doCopy(req copyReq, job *Job) (any, error) {
 		nbytes += ibytes
 		nfiles += len(list)
 		nitems++
-		s.logAction(m.disk, "copy-from", m.label, m.rel, len(list), 0)
-		s.logAction(dst.Disk, "copy-to", dst.Label, path.Join(destRel, j.base), len(list), ibytes)
+		m.disk.Log("copy-from", m.label, m.rel, len(list), 0)
+		dst.Disk.Log("copy-to", dst.Label, path.Join(destRel, j.base), len(list), ibytes)
 	}
 	return map[string]any{"copied": nitems, "files": nfiles, "bytes": nbytes}, nil
 }

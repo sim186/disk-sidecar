@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sim186/disk-sidecar/internal/catalog"
 	"github.com/sim186/disk-sidecar/internal/idx"
 	"github.com/sim186/disk-sidecar/internal/phone"
 	"github.com/sim186/disk-sidecar/internal/scan"
@@ -31,29 +32,26 @@ type prow struct {
 }
 
 // phoneDevice finds the catalog named label and the connected phone it describes.
-func (s *Server) phoneDevice(label string) (*Src, phone.Device, error) {
-	srcs, _ := s.listSources()
-	for _, x := range srcs {
-		if x.Label != label {
-			continue
-		}
-		if x.Kind != "phone" {
-			return nil, phone.Device{}, refuse("%s is not a phone", label)
-		}
-		plat, serial, ok := phone.Identity(x.DB)
-		if !ok {
-			return nil, phone.Device{}, refuse("%s: read the phone again with Add a phone… first", label)
-		}
-		if plat != "android" {
-			return nil, phone.Device{}, refuse("%s: only Android phones can be copied from or released; an iPhone is read only", label)
-		}
-		dev, found := phone.Find(serial)
-		if !found || dev.State != "ready" {
-			return nil, phone.Device{}, refuse("%s is not connected and unlocked", label)
-		}
-		return x, dev, nil
+func (s *Server) phoneDevice(label string) (*catalog.Source, phone.Device, error) {
+	x, err := s.catalog().Get(label)
+	if err != nil {
+		return nil, phone.Device{}, err
 	}
-	return nil, phone.Device{}, refuse("unknown source: %s", label)
+	if x.Kind != "phone" {
+		return nil, phone.Device{}, refuse("%s is not a phone", label)
+	}
+	plat, serial, ok := phone.Identity(x.DB)
+	if !ok {
+		return nil, phone.Device{}, refuse("%s: read the phone again with Add a phone… first", label)
+	}
+	if plat != "android" {
+		return nil, phone.Device{}, refuse("%s: only Android phones can be copied from or released; an iPhone is read only", label)
+	}
+	dev, found := phone.Find(serial)
+	if !found || dev.State != "ready" {
+		return nil, phone.Device{}, refuse("%s is not connected and unlocked", label)
+	}
+	return x, dev, nil
 }
 
 // phoneRows returns the files held by the items (a file, or a folder and all that is inside).
@@ -62,7 +60,7 @@ func phoneRows(db *sql.DB, sid int64, items []qItem) (rows []prow, itemOf map[in
 	itemOf, folder = map[int64]string{}, map[string]bool{}
 	seen := map[int64]bool{}
 	for _, it := range items {
-		rel, err := cleanRel(it.Path)
+		rel, err := catalog.CleanRel(it.Path)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -119,8 +117,8 @@ func (s *Server) doPhoneCopy(req copyReq, job *Job) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	srcs, _ := s.listSources()
-	var dst *Src
+	srcs := s.catalog().Sources()
+	var dst *catalog.Source
 	for _, x := range srcs {
 		if x.Label == req.To.Source {
 			dst = x
@@ -129,24 +127,24 @@ func (s *Server) doPhoneCopy(req copyReq, job *Job) (any, error) {
 	if dst == nil || dst.Kind != "disk" {
 		return nil, refuse("choose a disk to copy to")
 	}
-	if !dirExists(dst.Root) {
+	if !catalog.DirExists(dst.Root) {
 		return nil, refuse("%s: the disk is not reachable from this computer", dst.Label)
 	}
 	destRel := strings.Trim(strings.ReplaceAll(req.To.Path, "\\", "/"), "/")
 	if destRel != "" {
-		if destRel, err = cleanRel(destRel); err != nil {
+		if destRel, err = catalog.CleanRel(destRel); err != nil {
 			return nil, err
 		}
 	}
 	destDir := filepath.Join(dst.Root, filepath.FromSlash(destRel))
-	anc, below := existingAncestor(destDir)
+	anc, below := catalog.ExistingAncestor(destDir)
 	if st, err := os.Stat(anc); err != nil || !st.IsDir() {
 		return nil, refuse("%s: not a folder", destRel)
 	}
-	if realpath(anc) != realpath(dst.Root) && !inside(dst.Root, anc) {
+	if catalog.Realpath(anc) != catalog.Realpath(dst.Root) && !catalog.Inside(dst.Root, anc) {
 		return nil, refuse("%s: outside the disk", destRel)
 	}
-	if err := s.guardPath(filepath.Join(realpath(anc), below)); err != nil {
+	if err := s.guardPath(filepath.Join(catalog.Realpath(anc), below)); err != nil {
 		return nil, refuse("%s: %v", destRel, err)
 	}
 
@@ -183,7 +181,7 @@ func (s *Server) doPhoneCopy(req copyReq, job *Job) (any, error) {
 		return nil, err
 	}
 	defer ddb.Close()
-	copyFile(dst.DB, dst.DB+".bak")
+	catalog.CopyFile(dst.DB, dst.DB+".bak")
 	if job != nil {
 		job.Update("Copying from "+dev.Name+"…", 0, total)
 	}
@@ -255,7 +253,7 @@ func (s *Server) doPhoneCopy(req copyReq, job *Job) (any, error) {
 			nbytes += c.r.size
 			nfiles++
 		}
-		s.logAction(dst.Disk, "copy-to", dst.Label, path.Join(destRel, bases[it])+" (from "+psrc.Label+")", len(byItem[it]), 0)
+		dst.Disk.Log("copy-to", dst.Label, path.Join(destRel, bases[it])+" (from "+psrc.Label+")", len(byItem[it]), 0)
 	}
 	return map[string]any{"copied": len(order), "files": nfiles, "bytes": nbytes}, nil
 }
@@ -313,7 +311,7 @@ func pullVerified(serial, remote, to string, r prow) (string, error) {
 
 // backupOf looks for a copy of a phone file on a connected disk and proves it: the disk file is
 // read now and must have the hash. It returns where the proof was found, or "".
-func backupOf(disks []*Src, dbs map[string]*sql.DB, size int64, sum string) string {
+func backupOf(disks []*catalog.Source, dbs map[string]*sql.DB, size int64, sum string) string {
 	for _, d := range disks {
 		db := dbs[d.DB]
 		if db == nil {
@@ -371,11 +369,10 @@ func (s *Server) doPhoneRelease(items []qItem, confirm string, dry bool, job *Jo
 	if err != nil {
 		return nil, err
 	}
-	srcs, _ := s.listSources()
-	var disks []*Src
+	var disks []*catalog.Source
 	dbs := map[string]*sql.DB{}
-	for _, x := range srcs {
-		if x.Kind == "disk" && dirExists(x.Root) {
+	for _, x := range s.catalog().Sources() {
+		if x.Reachable() {
 			if _, ok := dbs[x.DB]; !ok {
 				db, err := idx.OpenRO(x.DB)
 				if err != nil {

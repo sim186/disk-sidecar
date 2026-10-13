@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sim186/disk-sidecar/internal/catalog"
 	"github.com/sim186/disk-sidecar/internal/idx"
 )
 
@@ -17,15 +18,9 @@ import (
 func (s *Server) indexFile() (string, error) {
 	s.idxMu.Lock()
 	defer s.idxMu.Unlock()
-	srcs, _ := s.listSources()
-	set := map[string]bool{}
-	for _, x := range srcs {
-		set[x.DB] = true
-	}
-	var dbs []string
-	for p := range set {
-		dbs = append(dbs, p)
-	}
+	cat := s.catalog()
+	srcs := cat.Sources()
+	dbs := cat.Indexes()
 	sort.Strings(dbs)
 	if len(dbs) == 0 {
 		return "", fmt.Errorf("no index found")
@@ -62,7 +57,7 @@ func (s *Server) indexFile() (string, error) {
 	return dest, nil
 }
 
-func buildCombined(srcs []*Src, dest string) error {
+func buildCombined(srcs []*catalog.Source, dest string) error {
 	page := make([]idx.PageSource, len(srcs))
 	for i, x := range srcs {
 		page[i] = idx.PageSource{DB: x.DB, SID: x.SID, Label: x.Label, Root: x.Root, Kind: x.Kind, ScannedAt: x.ScannedAt}

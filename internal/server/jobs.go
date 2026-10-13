@@ -3,17 +3,12 @@ package server
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
-	"fmt"
 	"sync"
+
+	"github.com/sim186/disk-sidecar/internal/refusal"
 )
 
-// Refused is an action refused for a reason worth showing to the user.
-type Refused struct{ Msg string }
-
-func (r *Refused) Error() string { return r.Msg }
-
-func refuse(format string, a ...any) error { return &Refused{Msg: fmt.Sprintf(format, a...)} }
+func refuse(format string, a ...any) error { return refusal.New(format, a...) }
 
 // Job is a long action running in the background; the page polls it for progress.
 type Job struct {
@@ -94,8 +89,7 @@ func (s *Server) startJob(fn func(*Job) (any, error)) (*Job, error) {
 		res, err := fn(job)
 		job.mu.Lock()
 		if err != nil {
-			var r *Refused
-			if errors.As(err, &r) {
+			if r, ok := refusal.As(err); ok {
 				job.err = r.Msg
 			} else {
 				job.err = err.Error()
