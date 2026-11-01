@@ -145,7 +145,10 @@ func Run(o Options) (Stats, error) {
 	c := make(chan result, 1)
 	go func() {
 		runtime.LockOSThread() // never unlocked: the thread ends with this goroutine, and its lowered priority with it
-		background()
+		// SIDECAR_SCAN_FOREGROUND is set only by ports/bench, to time the code and not the scheduler
+		if os.Getenv("SIDECAR_SCAN_FOREGROUND") == "" {
+			background()
+		}
 		st, err := run(o)
 		c <- result{st, err}
 	}()

@@ -88,7 +88,7 @@ func (s *Server) patchMarks(rows []markPatch) {
 		return
 	}
 	drop := func() { os.Remove(s.cachePath); s.cachePath, s.cacheSig = "", "" }
-	db, err := sql.Open("sqlite", idx.FileURI(s.cachePath, "_pragma=busy_timeout(30000)"))
+	db, err := sql.Open(idx.Driver, idx.FileURI(s.cachePath, idx.BusyParam))
 	if err != nil {
 		drop()
 		return

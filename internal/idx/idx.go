@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/sim186/disk-sidecar/internal/assets"
-	_ "modernc.org/sqlite" // pure Go SQLite, with FTS5: no C compiler, builds for every system
 )
 
 // SchemaVersion changes only when the layout can no longer be handled by older programs.
@@ -131,7 +130,7 @@ func FileURI(path, params string) string {
 
 // Open opens (and creates) an index for writing and makes sure the layout is there.
 func Open(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", FileURI(path, "_pragma=busy_timeout(30000)"))
+	db, err := sql.Open(Driver, FileURI(path, BusyParam))
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +151,7 @@ func OpenRO(path string) (*sql.DB, error) {
 	if _, err := os.Stat(path); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", FileURI(path, "mode=ro&_pragma=busy_timeout(30000)"))
+	db, err := sql.Open(Driver, FileURI(path, "mode=ro&"+BusyParam))
 	if err != nil {
 		return nil, err
 	}

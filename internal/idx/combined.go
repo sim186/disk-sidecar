@@ -17,7 +17,7 @@ type PageSource struct {
 // BuildCombined writes to dest the index the page receives: every source of every index, with its
 // files and marks, and without the extracted text (the server searches that).
 func BuildCombined(srcs []PageSource, dest string) error {
-	db, err := sql.Open("sqlite", FileURI(dest, "_pragma=busy_timeout(30000)"))
+	db, err := sql.Open(Driver, FileURI(dest, BusyParam))
 	if err != nil {
 		return err
 	}

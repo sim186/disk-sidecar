@@ -10,3 +10,7 @@ dist/
 __pycache__/
 .DS_Store
 ._*
+
+# ports: build output
+ports/rust/target/
+ports/c/build/
