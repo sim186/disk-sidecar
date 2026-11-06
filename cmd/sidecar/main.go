@@ -2,11 +2,16 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/sim186/disk-sidecar/internal/assets"
@@ -188,9 +193,11 @@ func main() {
 		}
 
 	case "serve":
+		serveFromHomeDisk(args) // passes the baton to a copy on this computer; never returns when it works
 		cfg := server.Config{}
 		fs.IntVar(&cfg.Port, "port", 8765, "port on 127.0.0.1")
 		fs.StringVar(&cfg.HomeDB, "db", "", "use this index as the home disk (development)")
+		fs.StringVar(&cfg.HomeDisk, "home-disk", "", "the disk this program is installed on (set when it re-executes from a copy on this computer)")
 		var mounts stringList
 		fs.Var(&mounts, "mounts", "extra folder that contains mounted disks (repeatable)")
 		fs.BoolVar(&cfg.NoOpen, "no-open", false, "do not open the browser")
@@ -238,4 +245,148 @@ func main() {
 		fmt.Fprintf(os.Stderr, usage, assets.Version)
 		os.Exit(2)
 	}
+}
+
+// serveFromHomeDisk keeps the server from running with its code on a disk that can be ejected.
+// macOS unmounts external disks on sleep and on a forced unplug; a program that still runs on
+// one starts firing on unreadable code pages (it catches every CPU, and even Ctrl+C no longer
+// works). So when the program runs off a mounted disk, it copies itself once to this computer's
+// own disk and goes on from that copy: the disk may then be ejected or unplugged at any time;
+// the server inside stays healthy, keeps its port and ends cleanly on --idle-exit.
+func serveFromHomeDisk(args []string) {
+	if os.Getenv("SIDECAR_RUN_IN_PLACE") != "" {
+		return // we are the copy on this computer already
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = real
+	}
+	root, onDisk := diskMount(exe)
+	if !onDisk {
+		return
+	}
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		noteRunningOnDisk(root, err)
+		return
+	}
+	f, err := os.Open(exe)
+	if err != nil {
+		noteRunningOnDisk(root, err)
+		return
+	}
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		f.Close()
+		noteRunningOnDisk(root, err)
+		return
+	}
+	name := hex.EncodeToString(h.Sum(nil))[:8]
+	f.Close()
+
+	place := filepath.Join(dir, "disk-sidecar", "server", name)
+	if os.MkdirAll(place, 0o755) != nil {
+		noteRunningOnDisk(root, os.ErrPermission)
+		return
+	}
+	os.Remove(filepath.Join(place, "copy.part"))
+	tmp := filepath.Join(place, "copy.part")
+	if copySelf(exe, tmp) != nil {
+		noteRunningOnDisk(root, fmt.Errorf("the copy to %s failed", place))
+		return
+	}
+	if os.Chmod(tmp, 0o755) != nil {
+		noteRunningOnDisk(root, nil)
+		return
+	}
+	newExe := filepath.Join(place, filepath.Base(exe))
+	os.Remove(newExe)
+	if os.Rename(tmp, newExe) != nil {
+		noteRunningOnDisk(root, nil)
+		return
+	}
+	if runtime.GOOS == "windows" { // exec replaces the process in os on windows
+		noteRunningOnDisk(root, nil)
+		return
+	}
+	argv := append([]string{}, os.Args...)
+	if !passed(args, "db") { // keep which disk this server belongs to across the copy
+		argv = append(argv, "-home-disk", root)
+	}
+	env := append(os.Environ(), "SIDECAR_RUN_IN_PLACE=1")
+	fmt.Fprintf(os.Stderr, "Running from %s so %s can be ejected or unplugged at any time.\n", place, root)
+	if err := syscall.Exec(newExe, argv, env); err != nil {
+		die(fmt.Errorf("cannot start the copy on %s: %w", place, err))
+	}
+}
+
+// diskMount says whether a path lives on a mounted disk: what root folder (darwin /Volumes/<name>,
+// linux /media/..., /run/media/..., /mnt/...) and with it "yes". This computer's own disk is no.
+func diskMount(p string) (root string, yes bool) {
+	switch runtime.GOOS {
+	case "darwin":
+		if rest, ok := strings.CutPrefix(p, "/Volumes/"); ok {
+			if name, _, _ := strings.Cut(rest, "/"); name != "" {
+				if real, err := filepath.EvalSymlinks("/Volumes/" + name); err == nil && real == "/" {
+					return "", false // the system disk itself ("Macintosh HD" is a copy of it)
+				}
+				return "/Volumes/" + name, true
+			}
+		}
+	case "linux", "freebsd":
+		for _, base := range []string{"/media/", "/run/media/", "/mnt/"} {
+			if rest, ok := strings.CutPrefix(p, base); ok {
+				if name, _, _ := strings.Cut(rest, "/"); name != "" {
+					return base + strings.SplitN(rest, "/", 2)[0], true
+				}
+			}
+		}
+	}
+	return "", false
+}
+
+// copySelf copies the program to to, so a copy can run on this computer.
+func copySelf(from, to string) error {
+	in, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(to)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(to)
+		return err
+	}
+	return nil
+}
+
+// passed says args carry a flag ( -flag or --flag, both with = or a separate value).
+func passed(args []string, flag string) bool {
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") && strings.TrimLeft(a, "-") == flag ||
+			strings.HasPrefix(a, "-") && strings.HasPrefix(strings.TrimLeft(a, "-"), flag+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+// noteRunningOnDisk says the program stays on its disk (the copy did not make it) and why.
+func noteRunningOnDisk(root string, why error) {
+	if why != nil {
+		fmt.Fprintf(os.Stderr, "Staying on %s (%s). It should not be ejected while this server runs.\n", root, why)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "Staying on %s. It should not be ejected while this server runs.\n", root)
 }

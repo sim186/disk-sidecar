@@ -60,6 +60,25 @@ func TestLabelsAreUniqueAcrossDisks(t *testing.T) {
 	}
 }
 
+// The program can run from a copy on this computer (see cmd/sidecar: serveFromHomeDisk); the disk it
+// serves is then passed on, and it is the home disk: first in the list and first to name the labels.
+func TestHomeDiskComesFirst(t *testing.T) {
+	mounts := t.TempDir()
+	a := disk(t, mounts, "A", "Photos")
+	disk(t, mounts, "B", "Photos")
+	c := Load(Options{Mounts: []string{mounts}, NoDefaultMounts: true, HomeDisk: a})
+	if len(c.Disks()) != 2 {
+		t.Fatalf("disks: %d", len(c.Disks()))
+	}
+	home := c.Disks()[0]
+	if home.Root != a || home.DB != filepath.Join(a, ".sidecar", "index.db") {
+		t.Fatalf("home disk: %+v", home)
+	}
+	if c.Find("Photos") == nil || c.Find("Photos").DB != home.DB {
+		t.Fatal("the home disk does not name the first label")
+	}
+}
+
 func TestWritableRefusesWhatSidecarOnlyReads(t *testing.T) {
 	c, _ := load(t)
 	if _, err := c.Writable("Photos", "its files cannot be moved"); err != nil {

@@ -33,6 +33,7 @@ import (
 type Config struct {
 	Port            int
 	HomeDB          string   // use this index as the home disk (development); default: the disk the program is on
+	HomeDisk        string   // the disk the program is installed on, when it runs from a copy on this computer
 	Mounts          []string // extra folders that contain mounted disks
 	NoDefaultMounts bool
 	NoOpen          bool
@@ -491,7 +492,7 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, p string) {
 }
 
 func (c Config) places() catalog.Options {
-	return catalog.Options{HomeDB: c.HomeDB, Mounts: c.Mounts, NoDefaultMounts: c.NoDefaultMounts}
+	return catalog.Options{HomeDB: c.HomeDB, HomeDisk: c.HomeDisk, Mounts: c.Mounts, NoDefaultMounts: c.NoDefaultMounts}
 }
 
 // catalog is what is visible now.

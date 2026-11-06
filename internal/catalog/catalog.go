@@ -23,6 +23,7 @@ import (
 // Options says where to look for disks.
 type Options struct {
 	HomeDB          string   // use this index as the home disk (development); default: the disk the program is on
+	HomeDisk        string   // the disk the program is installed on, when the program runs from a copy on this computer
 	Mounts          []string // extra folders that contain mounted disks
 	NoDefaultMounts bool
 }
@@ -246,10 +247,15 @@ func Discover(o Options) []*Disk {
 		seen[real] = true
 		disks = append(disks, newDisk(root, db))
 	}
-	if o.HomeDB != "" {
+	switch {
+	case o.HomeDB != "": // development: say which index is the home one
 		add(filepath.Dir(o.HomeDB), o.HomeDB)
-	} else if root, db := exeDisk(); db != "" {
-		add(root, db)
+	case o.HomeDisk != "": // the program runs from a copy on this computer (it may re-exec from one)
+		add(o.HomeDisk, filepath.Join(o.HomeDisk, ".sidecar", "index.db"))
+	default:
+		if root, db := exeDisk(); db != "" {
+			add(root, db)
+		}
 	}
 	for _, p := range MountCandidates(o) {
 		add(p, filepath.Join(p, ".sidecar", "index.db"))

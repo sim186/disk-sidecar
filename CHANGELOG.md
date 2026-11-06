@@ -4,6 +4,17 @@ All notable changes to Disk Sidecar. Versions follow [Semantic Versioning](https
 the layout of the index has its own number (`schema_version` in the index's `meta` table),
 which only changes when older programs could no longer read or write it safely.
 
+## Unreleased
+
+- A server no longer burns CPU time after its disk is ejected or unplugged. It used to run from its own copy on the
+  disk: macOS unmounts disks on sleep and on a forced unplug, and a program whose code pages were on it keeps running
+  on unreadable pages, catching the CPU (two cores on a modern Mac) without reacting even to Ctrl+C. It now copies
+  itself once to this computer's own disk and serves from there (whoever re-executes from a copy keeps which disk it
+  is on: the catalog is the same, with the same home disk); the disk can afterwards be ejected or unplugged at any
+  time, and the server inside ends in the usual ways. A cold start of `serve` on a disk prints the line it does this
+  and where the copy lives (the per-user cache folder). If the copy cannot be made, the server keeps running from
+  the disk like before and says so.
+
 ## 0.9.0
 
 - Sidecar ends cleanly in every case. Closing the Terminal window now stops it like Ctrl+C (before, its copy
